@@ -1,0 +1,1 @@
+{"baseline": {"success": 1.0, "cloud_share": 0.10476, "stationary_share": 0.30552}, "best": {"success": 1.0, "cloud_share": 0.10476, "stationary_share": 0.30552}, "best_params": {"lambda_n": 0.3, "lambda_p": 0.3, "lambda_l": 0.2, "rho_set": 0.7}, "accepted": false, "gate": "paper", "evaluations": 12, "round": 1, "decisions": 819200, "wall_s": 467.3}
