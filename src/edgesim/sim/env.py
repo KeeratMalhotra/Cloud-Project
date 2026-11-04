@@ -105,11 +105,13 @@ class EdgeEnv:
         self.debt_tau = float(lg["debt_tau_s"])
         self.request = None
         self.done = True
+        self.episode_id = 0
 
     # ------------------------------------------------------------------ episode setup
     def reset(self, tasks, seed: int = 0):
         """Start an episode. `tasks` is a mapping (or DataFrame) with the columns in TASK_FIELDS, sorted by t_arr."""
         cfg = self.cfg
+        self.episode_id += 1
         for f in TASK_FIELDS:
             setattr(self, f, np.asarray(tasks[f]))
         self.slice = self.slice.astype(np.int64)

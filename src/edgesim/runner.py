@@ -21,9 +21,13 @@ def split_readings(dataset: str, split: str) -> pd.DataFrame:
 
 
 def episode_tasks(dataset: str, split: str, n_tasks: int, seed: int, workload: dict | None = None) -> pd.DataFrame:
-    """Deterministic task table for (dataset, split, size, seed)."""
-    return build_episode(split_readings(dataset, split), n_tasks, seed, dataset_config(dataset),
-                         workload or workload_config())
+    """Deterministic task table for (dataset, split, size, seed). A custom `workload` may shorten the horizon;
+    the window is then sized for the equivalent 600 s regime so short episodes keep the same arrival rate."""
+    wl = workload or workload_config()
+    scale = 600.0 / float(wl["horizon_s"])
+    if scale != 1.0:
+        wl = {**wl, "window_oversample": wl["window_oversample"] * scale}
+    return build_episode(split_readings(dataset, split), n_tasks, seed, dataset_config(dataset), wl)
 
 
 def run_episode(env: EdgeEnv, policy, tasks, seed: int, slow_policy=None) -> dict:
