@@ -1,0 +1,13 @@
+Traceback (most recent call last):
+  File "/projects/sandbox/Cloud-Project/scripts/train.py", line 75, in <module>
+    main()
+  File "/projects/sandbox/Cloud-Project/scripts/train.py", line 67, in main
+    trainer = CCPPOTrainer(load_world(args.dataset), run_dir, cfg["system"], cfg.get("sim"), args.dataset,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/projects/sandbox/Cloud-Project/src/edgesim/agents/ccppo.py", line 144, in __init__
+    self.opt = torch.optim.Adam(self.model.parameters(), lr=self.p["lr"], eps=1e-5)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/projects/sandbox/Cloud-Project/.venv/lib/python3.11/site-packages/torch/optim/adam.py", line 59, in __init__
+    if not 0.0 <= lr:
+           ^^^^^^^^^
+TypeError: '<=' not supported between instances of 'float' and 'str'

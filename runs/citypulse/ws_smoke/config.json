@@ -1,0 +1,22 @@
+{
+  "method": "A2_no_pso",
+  "dataset": "citypulse",
+  "seed": 0,
+  "config": {
+    "system": "edgeplus",
+    "budget_decisions": 200000,
+    "ppo": {
+      "train_horizon_s": 600.0,
+      "gamma": 0.9,
+      "steps_per_iter": 1024,
+      "bc_decisions": 40000
+    },
+    "loads": {
+      "50000": 1,
+      "100000": 1,
+      "150000": 2
+    },
+    "advisory": {},
+    "pso": false
+  }
+}
