@@ -77,13 +77,15 @@ class StepBuffer:
         self.rep = np.zeros(c, np.float32)
         self.debt = np.zeros(c, np.float32)
         self.slice = np.zeros(c, np.int8)
+        self.expert = np.zeros(c, np.int64)   # greedy-EFT action at this decision (imitation target)
+        self.bc = np.zeros(c, bool)           # step collected by the expert during the warm-start phase
         self.resolved = np.zeros(c, bool)
         self.used = np.zeros(c, bool)
         self.done = np.zeros(c, bool)
         self.overflow = 0
 
     def add(self, obs: dict, bias: np.ndarray, action: int, logp: float, value: float, task_id: int,
-            slice_idx: int) -> None:
+            slice_idx: int, expert: int = 0, bc: bool = False) -> None:
         if self.head - self.tail >= self.cap:  # drop the oldest unresolved step (rare; counted)
             self._drop_tail()
         j = self.head % self.cap
@@ -96,9 +98,11 @@ class StepBuffer:
         self.action[j] = action
         self.logp[j] = logp
         self.value[j] = value
-        self.rep[j] = obs["servers"][action, 12] if action < self.n_servers else 1.0
-        self.debt[j] = obs["servers"][action, 16] * 10.0 if action < self.n_servers else 0.0
+        self.rep[j] = obs["servers"][action, 12] if action < self.n_servers else 1.0  # reputation column
+        self.debt[j] = obs["servers"][action, 16] * 10.0 if action < self.n_servers else 0.0  # debt column
         self.slice[j] = slice_idx
+        self.expert[j] = expert
+        self.bc[j] = bc
         self.resolved[j] = False
         self.used[j] = False
         self.done[j] = False
@@ -219,12 +223,14 @@ class VecEnvs:
     def observe_all(self) -> list[dict]:
         return [observe(env, self.caches[k]) for k, env in enumerate(self.envs)]
 
-    def step(self, actions, obs, biases, logps, values, reward_cfg: dict, on_episode_end=None, lagrange=None):
+    def step(self, actions, obs, biases, logps, values, reward_cfg: dict, on_episode_end=None, lagrange=None,
+             experts=None, bc: bool = False):
         """Apply one action per env, record steps, resolve finished tasks, and restart finished episodes."""
         for k, env in enumerate(self.envs):
             buf = self.buffers[k]
             i = env.i
-            buf.add(obs[k], biases[k], int(actions[k]), float(logps[k]), float(values[k]), i, int(env.slice[i]))
+            buf.add(obs[k], biases[k], int(actions[k]), float(logps[k]), float(values[k]), i, int(env.slice[i]),
+                    int(experts[k]) if experts is not None else 0, bc)
             env.act(int(actions[k]))
             buf.resolve(env, env.pop_completions(), reward_cfg, lagrange)
             if env.done:

@@ -17,6 +17,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from edgesim.agents.advisory import DEFAULTS as ADVISORY_DEFAULTS
 from edgesim.agents.advisory import Advisory
 from edgesim.agents.features import SERVER_DIM, TASK_DIM, global_dim
 from edgesim.agents.rl import REWARD_DEFAULTS, EpisodeSource, VecEnvs, explained_variance, lr_schedule
@@ -32,6 +33,10 @@ PPO_DEFAULTS = {
     "ent_coef": 0.01, "vf_coef": 0.5, "kl_coef": 0.0, "max_grad_norm": 0.5, "n_envs": 8,
     "steps_per_iter": 4096, "buffer_cap": 60000, "per_site_actors": True, "ensemble": 1,
     "recompute_old": True, "is_clip": 1.0, "reward_scale": 0.1, "train_horizon_s": 150.0,
+    # Warm start (not in the EdgePlus paper; applied identically to every learned method): for the first
+    # bc_decisions the environments follow greedy EFT and the actor imitates it; then PPO fine-tunes with an
+    # imitation term whose weight decays from bc_coef to 0 over bc_decay_frac of the remaining budget.
+    "bc_decisions": 0, "bc_coef": 1.0, "bc_decay_frac": 0.5,
     "lagrangian": False, "lagr_lr": 0.05, "lagr_target": [0.05, 0.10, 0.15], "lagr_max": 10.0,
 }
 
@@ -125,10 +130,14 @@ class CCPPOAgent:
 class CCPPOTrainer:
     def __init__(self, world: World, run_dir: Path, system: str, sim_overrides: dict | None, dataset: str,
                  seed: int, ppo: dict | None = None, reward: dict | None = None, advisory: dict | None = None,
-                 loads: dict | None = None):
+                 loads: dict | None = None, pso: dict | None = None):
         self.p = {**PPO_DEFAULTS, **(ppo or {})}
         self.reward_cfg = {**REWARD_DEFAULTS, **(reward or {})}
-        self.adv_params = advisory  # None disables the advisory layer
+        # advisory: None disables the layer; otherwise overrides of advisory.DEFAULTS (completed here so PSO and
+        # checkpoints always see the full parameter set)
+        self.adv_params = None if advisory is None else {**ADVISORY_DEFAULTS, **advisory}
+        self.pso_cfg = pso  # None disables PSO; e.g. {"gate": "paper", "at": [0.5, 0.85]}
+        self.dataset, self.seed = dataset, seed
         self.run_dir = Path(run_dir)
         self.run_dir.mkdir(parents=True, exist_ok=True)
         torch.manual_seed(seed)
@@ -143,14 +152,19 @@ class CCPPOTrainer:
         self.model = CCPPOModel(C, S, self.gdim, self.p["hidden"], self.p["per_site_actors"], self.p["ensemble"])
         self.opt = torch.optim.Adam(self.model.parameters(), lr=self.p["lr"], eps=1e-5)
         self.lagrange = np.zeros(3) if self.p["lagrangian"] else None
-        self.state = {"decisions": 0, "updates": 0, "episodes": 0, "wall_s": 0.0}
+        self.state = {"decisions": 0, "updates": 0, "episodes": 0, "wall_s": 0.0, "pso_rounds": 0}
         self.load_checkpoint()
         envs = [EdgeEnv(world, cfg) for _ in range(self.p["n_envs"])]
         src = EpisodeSource(dataset, "train", loads or {50_000: 1, 100_000: 1, 150_000: 2},
                             seed * 1000 + self.state["episodes"], horizon_s=self.p["train_horizon_s"])
         self.vec = VecEnvs(envs, src, self.p["buffer_cap"], self.gdim)
         self.reward_cfg["scale"] = self.p["reward_scale"]
-        self.advisors = [Advisory(C, S, advisory) for _ in envs] if advisory is not None else None
+        self._make_advisors()
+
+    def _make_advisors(self) -> None:
+        n = len(self.vec.envs)
+        self.advisors = [Advisory(self.C, self.S, self.adv_params) for _ in range(n)] \
+            if self.adv_params is not None else None
         self.recent: list[dict] = []
         self.miss_counts = np.zeros(3)
         self.slice_counts = np.zeros(3)
@@ -171,8 +185,10 @@ class CCPPOTrainer:
             ck = torch.load(self.ckpt_path(), weights_only=False)
             self.model.load_state_dict(ck["model"])
             self.opt.load_state_dict(ck["opt"])
-            self.state = ck["state"]
+            self.state = {"pso_rounds": 0, **ck["state"]}
             self.lagrange = ck.get("lagrange")
+            if self.adv_params is not None and ck.get("advisory") is not None:
+                self.adv_params = ck["advisory"]  # gains possibly tuned by PSO
 
     def log(self, row: dict) -> None:
         with open(self.run_dir / "log.jsonl", "a") as fh:
@@ -190,6 +206,8 @@ class CCPPOTrainer:
             bias = np.stack([self.advisors[k].bias(envs[k], obs[k]["util"]) for k in range(K)]).astype(np.float32)
         else:
             bias = np.zeros((K, self.S), np.float32)
+        # expert = greedy EFT: the feasible server with the lowest predicted latency (feature column 17)
+        experts = np.array([int(np.argmax(o["servers"][:, 17])) for o in obs])
         with torch.inference_mode():
             lg = self.model.head_logits(x, site)
             head = torch.from_numpy(self.rng.integers(self.p["ensemble"], size=K)) if self.p["ensemble"] > 1 \
@@ -197,10 +215,20 @@ class CCPPOTrainer:
             lg = lg[torch.arange(K), head]
             lg = masked_logits(lg, torch.from_numpy(bias), mask)
             dist = torch.distributions.Categorical(logits=lg)
-            a = dist.sample()
+            a = torch.from_numpy(experts) if self.in_bc_phase() else dist.sample()
             logp = dist.log_prob(a)
             v = self.model.value(g, x)
-        return a.numpy(), bias, logp.numpy(), v.numpy()
+        return a.numpy(), bias, logp.numpy(), v.numpy(), experts
+
+    def in_bc_phase(self) -> bool:
+        return self.state["decisions"] < self.p["bc_decisions"]
+
+    def bc_weight(self, budget: int) -> float:
+        p = self.p
+        if p["bc_decisions"] <= 0:
+            return 0.0
+        span = max(p["bc_decay_frac"] * (budget - p["bc_decisions"]), 1.0)
+        return p["bc_coef"] * max(0.0, 1.0 - (self.state["decisions"] - p["bc_decisions"]) / span)
 
     def _episode_end(self, k: int, env: EdgeEnv, meta: dict) -> None:
         kp = summarize(env)
@@ -237,10 +265,17 @@ class CCPPOTrainer:
         act = torch.from_numpy(cat(lambda b, s: b.action[s]))
         behav_logp = torch.from_numpy(cat(lambda b, s: b.logp[s]))
         old_v = torch.from_numpy(cat(lambda b, s: b.value[s]))
+        expert = torch.from_numpy(cat(lambda b, s: b.expert[s]))
+        bc_step = torch.from_numpy(cat(lambda b, s: b.bc[s]))
         adv = torch.from_numpy(np.concatenate([a for _, _, a in parts]))
         ret = adv + old_v
         adv_n = (adv - adv.mean()) / (adv.std() + 1e-8)
         n = len(act)
+        bc_only = self.in_bc_phase()
+        bc_w = 1.0 if bc_only else self.bc_weight(self._budget)
+        # PPO's ratio needs the behaviour policy's probabilities; warm-start steps were taken by the expert,
+        # so they only train the critic and the imitation term.
+        pg_on = (~bc_step).float()
         if p["ensemble"] > 1:  # bootstrap weights per head (Poisson(1)), as in a bootstrap ensemble
             boot = torch.from_numpy(self.rng.poisson(1.0, size=(n, p["ensemble"])).astype(np.float32))
         # Rewards arrive late, so samples come from policies a few updates old. With recompute_old the trust
@@ -269,11 +304,21 @@ class CCPPOTrainer:
                 ent = ent.mean()
                 ratio = torch.exp(logp - old_logp[idx])
                 a_mb = adv_n[idx] * is_w[idx]
-                pg = -torch.min(ratio * a_mb, torch.clamp(ratio, 1 - p["clip"], 1 + p["clip"]) * a_mb).mean()
+                w_pg = pg_on[idx]
+                pg_terms = torch.min(ratio * a_mb, torch.clamp(ratio, 1 - p["clip"], 1 + p["clip"]) * a_mb)
+                pg = -(pg_terms * w_pg).sum() / w_pg.sum().clamp(min=1.0)
                 v = self.model.value(g[idx], x[idx])
                 vf = F.mse_loss(v, ret[idx])
-                approx_kl = (old_logp[idx] - logp).mean()
-                loss = pg + p["vf_coef"] * vf - p["ent_coef"] * ent + p["kl_coef"] * approx_kl
+                approx_kl = ((old_logp[idx] - logp) * w_pg).sum() / w_pg.sum().clamp(min=1.0)
+                loss = p["vf_coef"] * vf
+                if bc_w > 0:
+                    bc_logp, _ = self._logp(x[idx], site[idx], bias[idx], mask[idx], expert[idx],
+                                            boot[idx] if p["ensemble"] > 1 else None)
+                    bc_loss = -bc_logp.mean()
+                    loss = loss + bc_w * bc_loss
+                    stats["bc"] = stats.get("bc", 0.0) + float(bc_loss)
+                if not bc_only:
+                    loss = loss + pg - p["ent_coef"] * ent + p["kl_coef"] * approx_kl
                 self.opt.zero_grad()
                 loss.backward()
                 nn.utils.clip_grad_norm_(self.model.actor.parameters(), p["max_grad_norm"])
@@ -294,6 +339,12 @@ class CCPPOTrainer:
             buf.mark_used(s)
         stats["samples"] = int(n)
         stats["is_w"] = float(is_w.mean())
+        stats["bc_w"] = round(bc_w, 4)
+        stats["bc_steps"] = int(bc_step.sum())
+        with torch.no_grad():  # how often the policy's most likely server is the expert's choice
+            lg = self.model.head_logits(x[:4096], site[:4096]).mean(1)
+            top = masked_logits(lg, bias[:4096], mask[:4096]).argmax(1)
+            stats["agree"] = float((top == expert[:4096]).float().mean())
         return stats
 
     def _logp(self, x, site, bias, mask, act, boot):
@@ -312,12 +363,15 @@ class CCPPOTrainer:
     def train(self, budget_decisions: int, max_minutes: float, ckpt_every: int = 5) -> dict:
         t_start = time.time()
         p = self.p
+        self._budget = budget_decisions
         while self.state["decisions"] < budget_decisions and (time.time() - t_start) < 60 * max_minutes:
             t0 = time.time()
             for _ in range(p["steps_per_iter"]):
                 obs = self.vec.observe_all()
-                a, bias, logp, v = self._act(obs)
-                self.vec.step(a, obs, bias, logp, v, self.reward_cfg, self._episode_end, self.lagrange)
+                bc = self.in_bc_phase()
+                a, bias, logp, v, experts = self._act(obs)
+                self.vec.step(a, obs, bias, logp, v, self.reward_cfg, self._episode_end, self.lagrange,
+                              experts=experts, bc=bc)
             self.state["decisions"] += p["steps_per_iter"] * len(self.vec.envs)
             t1 = time.time()
             parts = self._gather()
@@ -348,8 +402,37 @@ class CCPPOTrainer:
             print(json.dumps(row), flush=True)
             if self.state["updates"] % ckpt_every == 0:
                 self.save_checkpoint()
+            self._maybe_pso(budget_decisions)
         self.save_checkpoint()
         return self.state
+
+    def _maybe_pso(self, budget: int) -> None:
+        """Run the scheduled PSO rounds over the advisory gains (frozen policy, training-day episodes)."""
+        if self.pso_cfg is None or self.adv_params is None:
+            return
+        from edgesim.agents.pso import pso_round
+
+        at = self.pso_cfg.get("at", [0.5, 0.85])
+        r = self.state["pso_rounds"]
+        if r >= len(at) or self.state["decisions"] < at[r] * budget:
+            return
+        t0 = time.time()
+
+        def make_agent(params):
+            return CCPPOAgent(self.model, params, self.C, self.S, greedy=True)
+
+        new, rec = pso_round(make_agent, self.world, self.cfg, self.dataset, self.adv_params,
+                             self.pso_cfg.get("gate", "paper"), seed=self.seed * 100 + r,
+                             opts=self.pso_cfg.get("opts"), log=lambda m: print(m, flush=True))
+        self.model.train()
+        self.adv_params = new
+        self._make_advisors()
+        self.state["pso_rounds"] = r + 1
+        rec.update({"round": r + 1, "decisions": self.state["decisions"], "wall_s": round(time.time() - t0, 1)})
+        with open(self.run_dir / "pso.jsonl", "a") as fh:
+            fh.write(json.dumps(rec) + "\n")
+        print(json.dumps({"pso": rec}), flush=True)
+        self.save_checkpoint()
 
     def agent(self, greedy: bool = True) -> CCPPOAgent:
         return CCPPOAgent(self.model, self.adv_params, self.C, self.S, greedy)

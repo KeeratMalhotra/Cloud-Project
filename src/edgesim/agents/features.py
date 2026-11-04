@@ -3,7 +3,8 @@
 Local observation (actor input, EdgePlus Sec. IV-B4): the task, plus one row per server.
     task (TASK_DIM): slice one-hot, priority one-hot, slack, cycles, payload, memory, episode time
     server rows (S x SERVER_DIM): mask, tier one-hot, predicted latency vs slack, slack margin, queue wait,
-        processing, drive time, utilization, memory used, reputation, kind one-hot, site debt
+        processing, drive time, utilization, memory used, reputation, kind one-hot, site debt,
+        fastest-feasible flag, latency rank among feasible servers
 Global observation (critic input only): per-site backlog, utilization, slice-budget fill, debt, parked
 mobiles, plus cloud backhaul backlog and episode time.
 
@@ -17,7 +18,7 @@ from edgesim.sim.env import EdgeEnv
 from edgesim.sim.world import MOB
 
 TASK_DIM = 11
-SERVER_DIM = 17
+SERVER_DIM = 19
 SITE_DIM = 7
 
 
@@ -59,6 +60,13 @@ def server_features(env: EdgeEnv, util: np.ndarray, debt: np.ndarray) -> np.ndar
     site = env.site
     f[:, 16] = np.where(site >= 0, debt[np.maximum(site, 0)], 0.0) / 10.0
     f[tier < 0, 5:12] = 0.0
+    # Rank of the predicted latency among feasible servers: 0 = fastest, 1 = slowest or infeasible.
+    feas = np.flatnonzero(env.cur_mask)
+    f[:, 18] = 1.0
+    if feas.size:
+        order = feas[np.argsort(L[feas], kind="stable")]
+        f[order[0], 17] = 1.0
+        f[order, 18] = np.arange(order.size) / max(order.size - 1, 1)
     return f
 
 
