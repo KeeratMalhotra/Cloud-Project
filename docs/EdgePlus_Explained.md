@@ -313,7 +313,7 @@ For us this is overkill. Straight-line driving or plain A\* is fine.
 
 ## 11. The data
 
-They use real data: the Brașov (Romania) pollution dataset, 449 sites, Aug–Oct 2014 (part of the [CityPulse smart city datasets](http://iot.ee.surrey.ac.uk:8080/)). Each reading gets turned into a task (Algorithm 3):
+The paper says it uses the Brașov (Romania) pollution traces, 449 sites, Aug–Oct 2014 (from the [CityPulse smart city datasets](http://iot.ee.surrey.ac.uk:8080/)). Heads-up: the only 449-site Aug–Oct 2014 pollution file on CityPulse is located in Aarhus, Denmark, and it is generated data (a random walk), not real sensor readings. Details in [EdgePlus_Deep_Review.md, section 5.1](./EdgePlus_Deep_Review.md#51-data-provenance). Each reading gets turned into a task (Algorithm 3):
 
 1. Measure how abnormal the reading is and whether it's spiking.
 2. Assign a tier: Immediate → URLLC, Routine → eMBB, Delayed → mMTC.
@@ -323,7 +323,7 @@ They use real data: the Brașov (Romania) pollution dataset, 449 sites, Aug–Oc
 
 Then they build three load levels: **50k, 100k, and 150k tasks**.
 
-So the timing comes from real sensors and the task details are synthetic. That works for us too.
+So the sensor locations and timing come from that file and the task details are synthetic. That works for us too, as long as our paper says so.
 
 ---
 
@@ -347,7 +347,7 @@ So the timing comes from real sensors and the task details are synthetic. That w
 - **Jain fairness:** 1 = perfectly even load, lower = lopsided.
 - **The stats:** a 95% CI is the range where the true average likely sits. Wilcoxon tests whether two methods really differ. Benjamini–Hochberg is a correction so that running lots of tests doesn't hand you fake wins.
 
-**Headline numbers to remember (150k tasks):** 82.77% on time, 17.23% violations, Lp50 = 53.23 s, Lp95 ≈ 147 s, cloud share 6.1%.
+**Headline numbers to remember (150k tasks):** 82.77% on time, 17.23% violations, Lp50 = 53.23 s, Lp95 ≈ 147 s, cloud share 6.1% (Fig. 13; Fig. 11 shows about 2% for the same run, see the [deep review](./EdgePlus_Deep_Review.md#52-internal-inconsistencies)).
 
 ---
 
