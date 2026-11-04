@@ -40,6 +40,8 @@ def task_rewards(env: EdgeEnv, ids: np.ndarray, rep: np.ndarray, debt: np.ndarra
     lat = np.where(rej, rel, env.latency[ids])
     r -= cfg["eta_lat"] * np.minimum(lat / rel, cfg["lat_cap"])
     energy = env.e_tx[ids] + env.e_comp[ids] + env.e_net[ids]
+    if cfg.get("move_energy", True):  # EdgePlus Eq. 2 counts the driving a mobile does for the task
+        energy = energy + env.e_move[ids]
     r -= cfg["eta_energy"] * np.minimum(energy / cfg["e_ref_j"], cfg["e_cap"])
     srv = env.server_log[ids]
     cloud = (srv >= 0) & (env.kind[np.maximum(srv, 0)] == CLOUD)

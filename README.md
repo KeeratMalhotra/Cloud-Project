@@ -3,8 +3,8 @@
 Research project with three parts:
 
 1. Re-implement the base paper, **EdgePlus** (Taher et al., IEEE Internet of Things Journal, 2026).
-2. Propose our own multi-agent RL framework, **CHORUS**, and compare it with EdgePlus under identical conditions.
-3. Test both on a second, real dataset from New Delhi that neither method was tuned on.
+2. Extend it with three system improvements, **EdgePlus-PEC**: slice-priority queues, energy-aware execution and mobility (DVFS, serving from neighbouring mobiles without driving, damped redeployment), and faster ledger consensus (time-bounded blocks, short BFT rounds). The scheduler itself is unchanged.
+3. Compare both under identical conditions on CityPulse and on a second, real dataset from New Delhi (AirDelhi) that neither was tuned on.
 
 ## Documents
 
@@ -12,8 +12,8 @@ Research project with three parts:
 |---|---|
 | [`docs/EdgePlus_Explained.md`](docs/EdgePlus_Explained.md) | Beginner-friendly walkthrough of the base paper |
 | [`docs/EdgePlus_Deep_Review.md`](docs/EdgePlus_Deep_Review.md) | Full technical spec, reported numbers, issues found, decisions |
-| [`docs/CHORUS_Design.md`](docs/CHORUS_Design.md) | Our framework: agents, learning, datasets, evaluation protocol, build plan |
 | [`docs/Simulator.md`](docs/Simulator.md) | Shared simulator: model, EdgePlus interpretations, validation, calibration, rule-based baselines |
+| [`docs/HANDOFF.md`](docs/HANDOFF.md) | Current state, how to resume, and the next steps |
 
 ## Setup
 
@@ -65,7 +65,7 @@ configs/            YAML settings: datasets, workload, topology, simulator (sim.
 src/edgesim/        shared package
   data/             loaders (citypulse, airdelhi), mirror, labeling, episode builder
   sim/              event-driven simulator: world, radio, calibration, env (core), metrics
-  agents/           rule-based dispatchers (learned agents from milestone M3)
+  agents/           rule-based dispatchers, EdgePlus learner (CCPPO, advisory, PSO), features, rewards
   topology.py       city frame, weighted K-means sites, Delaunay neighbours, server inventory
   runner.py         episode loading and running; experiments.py runs grids in parallel
   plots.py          figures
@@ -76,7 +76,7 @@ results/summary/    committed result summaries
 
 ## Status
 
-Milestones M1 (data and topology) and M2 (shared simulator, validation, calibration, rule-based baselines) are done. Next is M3: the EdgePlus reproduction. See the build plan in [`docs/CHORUS_Design.md`](docs/CHORUS_Design.md#12-build-plan).
+Data pipelines, the shared simulator, the EdgePlus reproduction, and EdgePlus-PEC are implemented. See [`docs/HANDOFF.md`](docs/HANDOFF.md) for results so far and the next steps.
 
 ## Data sources and licenses
 

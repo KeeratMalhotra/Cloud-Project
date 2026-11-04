@@ -103,6 +103,43 @@ class EdgeEnv:
         self.rep_beta, self.rep_kappa = float(lg["ema"]), float(lg["kappa"])
         self.rep_urllc = float(lg["rep_urllc_threshold"])
         self.debt_tau = float(lg["debt_tau_s"])
+        # Energy-saving options (EdgePlus-PEC). Off by default, so EdgePlus runs exactly as before.
+        dv = en.get("dvfs", {}) or {}
+        self.dvfs_on = bool(dv.get("enabled", False))
+        self.dvfs_levels = sorted(float(x) for x in dv.get("levels", [1.0]))
+        self.dvfs_margin = float(dv.get("margin", 0.5))
+        # serve_remote: a neighbouring site's mobile serves the task where it is parked; the data goes over the
+        # metro link between sites (FIFO per home site) instead of the mobile driving over (EdgePlus Eq. 1, L_move).
+        self.serve_remote = bool(mo.get("serve_remote", False))
+        self.metro_rate = float(net.get("metro_gbps", 1.0)) * 1e9
+        self.metro_delay = float(net.get("metro_delay_s", 0.002))
+        self.distress_persist = int(mo.get("distress_persist_steps", 1))
+        self.donor_near = mo.get("donor_order", "calm") == "near"
+        # Ledger timing (EdgePlus Sec. III-M). "instant": reputation and debt change at task completion (the
+        # idealised reading used before Nov 2026). "blocks": they change when the record's partial block is
+        # committed by edge PoA, as Sec. III-M.7 states; cloud BFT finality is tracked for the KPIs.
+        lc = lg.get("consensus", {}) or {}
+        self.ledger_mode = lc.get("mode", "instant")
+        if self.ledger_mode not in ("instant", "blocks"):
+            raise ValueError(f"unknown ledger.consensus.mode {self.ledger_mode!r}")
+        if self.ledger_mode == "blocks":
+            cu = lc["crypto_us"]
+            self.c_sign, self.c_verify, self.c_tag = cu["sign"] * 1e-6, cu["verify"] * 1e-6, cu["tag"] * 1e-6
+            self.c_hash0, self.c_hash1 = cu["hash_fixed"] * 1e-6, cu["hash_per_tuple"] * 1e-6
+            self.blk_min, self.blk_max = float(lc["block_min"]), float(lc["block_max"])
+            self.blk_rho_max, self.blk_write_max = float(lc["rho_max"]), float(lc["write_max"])
+            self.blk_timeout = float(lc["timeout_s"]) if lc.get("timeout_s") else INF
+            self.n_val = int(lc["validators"])
+            self.quorum = self.n_val if lc.get("quorum", "all") == "all" else self.n_val * 2 // 3 + 1
+            self.g_period = float(lc["global_period_s"])
+            self.g_eager = lc.get("global_trigger", "periodic") == "eager"
+            n_rep = int(lc["bft_replicas"])
+            q = 2 * ((n_rep - 1) // 3) + 1
+            one_way = float(lc["cloud_rtt_s"]) / 2.0
+            # PBFT: pre-prepare (primary signs, replicas verify), then prepare and commit (each replica signs
+            # once and verifies a quorum of q messages per phase); three one-way message delays.
+            self.t_bft = 3 * one_way + self.c_sign + self.c_verify + 2 * (self.c_sign + q * self.c_verify)
+            self.bft_cpu = self.c_sign + n_rep * self.c_verify + 2 * n_rep * (self.c_sign + q * self.c_verify)
         self.request = None
         self.done = True
         self.episode_id = 0
@@ -186,6 +223,29 @@ class EdgeEnv:
         self.e_tx = np.zeros(N)
         self.e_comp = np.zeros(N)
         self.e_net = np.zeros(N)
+        self.e_move = np.zeros(N)          # driving energy caused by this task's assignment (EdgePlus Eq. 2)
+        self.dvfs_lvl = np.ones(N)         # core speed factor the task ran at
+        self.remote = np.zeros(N, dtype=bool)  # served by a neighbouring site's mobile over the metro link
+        self.metro_busy = np.zeros(C)
+        self.distress_cnt = np.zeros(C, dtype=np.int64)
+        if self.ledger_on and self.ledger_mode == "blocks":
+            self.lg_pend = [[] for _ in range(C)]   # tuples waiting for the next partial block, per cluster
+            self.lg_first = np.full(C, INF)          # write time of the oldest waiting tuple
+            self.lg_last = np.full(C, -INF)          # write time of the newest waiting tuple
+            self.lg_busy = np.zeros(C)               # PoA validation of a cluster's blocks is sequential
+            self.lg_heap = []                         # (commit time, seq, cluster, task ids)
+            self.lg_seq = 0
+            self.lg_count = np.zeros(C)              # tuples written since the last slow step
+            self.lg_rate = np.zeros(C)               # write rate per cluster, tuples/s
+            self.lg_target = np.full(C, self.blk_min)
+            self.lg_write_t = np.full(N, np.nan)
+            self.commit_t = np.full(N, np.nan)
+            self.final_t = np.full(N, np.nan)
+            self.lg_blocks = 0
+            self.lg_cpu = 0.0
+            self.lg_rounds = 0
+            self.lg_last_round = -1
+            self.g_start = self.g_end = self.g_next_end = -INF
         self.rep_at = np.full(N, np.nan)
         self.debt_at = np.full(N, np.nan)
         self.km_driven = 0.0
@@ -265,9 +325,17 @@ class EdgeEnv:
 
     # ------------------------------------------------------------------ main loop
     def _prepare_next(self) -> None:
+        blocks = self.ledger_on and self.ledger_mode == "blocks"
         while True:
             if self.i >= self.N:
+                if blocks:  # drain in 0.25 s steps so ledger blocks see completions in time order
+                    while self.evheap:
+                        T = self.evheap[0][0] + 0.25
+                        self._advance_all(T)
+                        self._ledger_until(T)
                 self._advance_all(INF)
+                if blocks:
+                    self._ledger_flush()
                 self.done = True
                 self.request = None
                 return
@@ -276,6 +344,9 @@ class EdgeEnv:
                 ts = self.next_slow
                 self.next_slow += self.slow_dt
                 self._advance_all(ts)
+                if blocks:
+                    self._ledger_until(ts)
+                    self._ledger_retarget()
                 self.now = ts
                 self._park(ts)
                 self._refill(ts)
@@ -286,6 +357,8 @@ class EdgeEnv:
                 self._builtin_slow(ts)
                 continue
             self._advance_all(t)
+            if blocks:
+                self._ledger_until(t)
             self.now = t
             self._park(t)
             self._refill(t)
@@ -358,16 +431,28 @@ class EdgeEnv:
         self._util_touch(s, now)
         f = self.f_core[s]
         cyc = self.cycles[j]
-        heapq.heappush(self.running[s], (now + cyc / f * self.svc_noise[j], j))
+        lvl = 1.0
+        # DVFS with slack reclamation: run at the lowest core speed that still leaves a safety margin before the
+        # deadline, but only when nobody else is waiting and another core stays free, so no other task is delayed.
+        if self.dvfs_on and not self.is_cloud[s] and self.free[s] > 1 and not self.readyq[s]:
+            slack = self.deadline[j] - now - self.downlink[s]
+            base = cyc / f
+            for x in self.dvfs_levels:
+                if base / x * (1.0 + self.dvfs_margin) <= slack:
+                    lvl = x
+                    break
+        fe = f * lvl
+        heapq.heappush(self.running[s], (now + cyc / fe * self.svc_noise[j], j))
         self.free[s] -= 1
         k = self.slice[j]
         self.q_cnt[s, k] -= 1
         self.q_cyc[s, k] -= cyc
-        ef = now + cyc / f
+        ef = now + cyc / fe
         self.run_ef[j] = ef
         self.run_ef_sum[s] += ef
         self.start_t[j] = now
-        e = self.j_cycle[s] * cyc * self.svc_noise[j]
+        self.dvfs_lvl[j] = lvl
+        e = self.j_cycle[s] * cyc * self.svc_noise[j] * lvl * lvl  # dynamic energy per cycle ~ f^2
         self.e_comp[j] = e
         if self.is_mob[s]:
             self.battery[s] -= e
@@ -377,7 +462,7 @@ class EdgeEnv:
         self.free[s] += 1
         self.run_ef_sum[s] -= self.run_ef[j]
         self.mem_used[s] -= self.mem_mb[j]
-        done = fin + self.downlink[s]
+        done = fin + self.downlink[s] + (self.metro_delay if self.remote[j] else 0.0)
         lat = done - self.t_arr[j]
         ok = done <= self.deadline[j]
         self.finish_t[j] = done
@@ -386,19 +471,123 @@ class EdgeEnv:
         svc = fin - self.start_t[j]
         self.svc_m1[s] += 0.02 * (svc - self.svc_m1[s])
         self.svc_m2[s] += 0.02 * (svc * svc - self.svc_m2[s])
-        if self.ledger_on:
-            self.rep[s] += self.rep_beta * ((1.0 if ok else -self.rep_kappa) - self.rep[s])
-        if ok:
-            c = self.home[j]
-            dt = fin - self.thr_t[c]
-            if dt >= 0:
-                self.thr[c] = self.thr[c] * math.exp(-dt / self.debt_tau) + 1.0 / self.debt_tau
-                self.thr_t[c] = fin
-            else:
-                self.thr[c] += math.exp(dt / self.debt_tau) / self.debt_tau
+        if self.ledger_on and self.ledger_mode == "blocks":
+            self._ledger_write(j, fin)  # reputation and debt change when the block is committed
+        else:
+            if self.ledger_on:
+                self.rep[s] += self.rep_beta * ((1.0 if ok else -self.rep_kappa) - self.rep[s])
+            if ok:
+                self._thr_add(int(self.home[j]), fin)
         if self.calib is not None:
             self.calib.update(int(self.slice[j] * 3 + self.kind[s]), self.pred_L[j], lat, self.bound[j])
         self.completions.append(j)
+
+    def _thr_add(self, c: int, t: float) -> None:
+        dt = t - self.thr_t[c]
+        if dt >= 0:
+            self.thr[c] = self.thr[c] * math.exp(-dt / self.debt_tau) + 1.0 / self.debt_tau
+            self.thr_t[c] = t
+        else:
+            self.thr[c] += math.exp(dt / self.debt_tau) / self.debt_tau
+
+    # ------------------------------------------------------------------ ledger timing (EdgePlus Sec. III-M)
+    def _poa_time(self, b: int) -> tuple[float, float]:
+        """Wall time and total CPU time to validate one partial block of b tuples by edge PoA (Eqs. 19-22)."""
+        h = self.c_hash0 + self.c_hash1 * b
+        leader = h + b * self.c_tag + self.c_sign                     # hash, check tags, sign the block
+        validator = self.c_verify + b * self.c_tag + h + self.c_sign  # in parallel at every authority
+        collect = self.quorum * self.c_verify                         # leader checks the votes it needs
+        wall = leader + self.lan + validator + self.lan + collect
+        return wall, leader + self.n_val * validator + collect
+
+    def _ledger_write(self, j: int, t: float) -> None:
+        # Completions reach this point server by server, so write times are not globally sorted; a block is
+        # never cut before the latest write it contains (lg_last).
+        c = int(self.home[j])
+        if self.lg_pend[c] and t >= self.lg_first[c] + self.blk_timeout:
+            self._ledger_cut(c, self.lg_first[c] + self.blk_timeout)
+        if not self.lg_pend[c]:
+            self.lg_first[c] = self.lg_last[c] = t
+        self.lg_pend[c].append(j)
+        self.lg_first[c] = min(self.lg_first[c], t)
+        self.lg_last[c] = max(self.lg_last[c], t)
+        self.lg_write_t[j] = t
+        self.lg_count[c] += 1
+        if len(self.lg_pend[c]) >= self.lg_target[c]:
+            self._ledger_cut(c, t)
+
+    def _ledger_cut(self, c: int, t: float) -> None:
+        t = max(t, self.lg_last[c])
+        ids = self.lg_pend[c]
+        self.lg_pend[c] = []
+        self.lg_first[c] = INF
+        self.lg_last[c] = -INF
+        wall, cpu = self._poa_time(len(ids))
+        done = max(t, self.lg_busy[c]) + wall
+        self.lg_busy[c] = done
+        self.lg_cpu += cpu
+        self.lg_blocks += 1
+        heapq.heappush(self.lg_heap, (done, self.lg_seq, c, ids))
+        self.lg_seq += 1
+
+    def _ledger_until(self, T: float) -> None:
+        """Cut blocks whose timeout passed, then apply every PoA commit up to time T, in time order."""
+        if self.blk_timeout < INF and T < INF:
+            for c in np.flatnonzero(self.lg_first + self.blk_timeout <= T):
+                self._ledger_cut(int(c), self.lg_first[c] + self.blk_timeout)
+        h = self.lg_heap
+        while h and h[0][0] <= T:
+            tc, _, c, ids = heapq.heappop(h)
+            for j in ids:
+                s = self.server_log[j]
+                ok = self.on_time[j]
+                self.rep[s] += self.rep_beta * ((1.0 if ok else -self.rep_kappa) - self.rep[s])
+                if ok:
+                    self._thr_add(c, tc)
+            self.commit_t[ids] = tc
+            self.final_t[ids] = self._finality(tc + self.wan)
+
+    def _finality(self, arr: float) -> float:
+        """Time the cloud BFT round that includes a cluster hash arriving at `arr` finishes (Eqs. 23-25)."""
+        if not self.g_eager:  # rounds start every global_period_s
+            k = math.ceil(arr / self.g_period)
+            if k != self.lg_last_round:
+                self.lg_last_round = k
+                self.lg_rounds += 1
+                self.lg_cpu += self.bft_cpu
+            return k * self.g_period + self.t_bft
+        # eager: a round starts as soon as a hash is waiting and no round is running (pipelined)
+        while self.g_next_end > self.g_end and arr >= self.g_end:
+            self.g_start, self.g_end = self.g_end, self.g_next_end
+        if arr >= self.g_end:
+            self.g_start, self.g_end = arr, arr + self.t_bft
+            self.lg_rounds += 1
+            self.lg_cpu += self.bft_cpu
+            return self.g_end
+        if self.g_next_end <= self.g_end:
+            self.g_next_end = self.g_end + self.t_bft
+            self.lg_rounds += 1
+            self.lg_cpu += self.bft_cpu
+        return self.g_next_end
+
+    def _ledger_retarget(self) -> None:
+        """Adaptive block size per cluster from utilization and write rate (EdgePlus Eq. 21, capped at S_max)."""
+        rate = self.lg_count / max(self.slow_dt, 1e-9)
+        self.lg_count[:] = 0.0
+        self.lg_rate = 0.5 * self.lg_rate + 0.5 * rate
+        util = self.utilization()
+        edge = (self.site >= 0) & ~self.is_cloud
+        n = np.bincount(self.site[edge], minlength=self.C)
+        rho = np.bincount(self.site[edge], weights=util[edge], minlength=self.C) / np.maximum(n, 1)
+        frac = np.minimum(1.0, rho / self.blk_rho_max + self.lg_rate / self.blk_write_max)
+        self.lg_target = self.blk_min + frac * (self.blk_max - self.blk_min)
+
+    def _ledger_flush(self) -> None:
+        """End of episode: blocks still filling are cut when their last record was written, then committed."""
+        for c in range(self.C):
+            if self.lg_pend[c]:
+                self._ledger_cut(c, self.lg_last[c])
+        self._ledger_until(INF)
 
     # ------------------------------------------------------------------ decisions
     def _predict(self, i: int, t: float) -> None:
@@ -427,11 +616,17 @@ class EdgeEnv:
             move[dh] = np.maximum(self.arrive_t[dh] - t, 0.0)
             ready[dh] = np.maximum(self.arrive_t[dh], t) + ltx
         mo = tier == T_OTHER_MOB
+        back = np.zeros(self.S)
         if mo.any():
-            cx, cy = self.centers[home]
-            d_m = np.hypot(self.pos[mo, 0] - cx, self.pos[mo, 1] - cy) * self.road * 1000.0
-            move[mo] = d_m / self.v[mo]
-            ready[mo] = t + move[mo] + ltx
+            if self.serve_remote:
+                xfer = max(self.metro_busy[home], t + ltx + self.lan) + self.payload_bits[i] / self.metro_rate
+                ready[mo] = xfer + self.metro_delay
+                back[mo] = self.metro_delay
+            else:
+                cx, cy = self.centers[home]
+                d_m = np.hypot(self.pos[mo, 0] - cx, self.pos[mo, 1] - cy) * self.road * 1000.0
+                move[mo] = d_m / self.v[mo]
+                ready[mo] = t + move[mo] + ltx
         bh_done = max(self.bh_busy, t + ltx) + self.payload_bits[i] / self.bh_rate
         ready[self.is_cloud] = bh_done + self.wan
 
@@ -459,7 +654,7 @@ class EdgeEnv:
                 wait = wait / np.maximum(1.0 - rho_high, 0.1)
             start = np.maximum(ready, t + wait)
         proc = self.cycles[i] / self.f_core
-        L = start + proc + self.downlink - t
+        L = start + proc + self.downlink + back - t
         U = self.calib.bound(L, k * 3 + kind) if self.calib is not None else L
 
         mask = phys.copy()
@@ -537,8 +732,14 @@ class EdgeEnv:
             self.bh_busy = start_bh + self.payload_bits[i] / self.bh_rate
             r = self.bh_busy + self.wan
             self.e_net[i] = self.payload_bits[i] * self.j_bit
+        elif tier == T_OTHER_MOB and self.serve_remote:
+            st = max(self.metro_busy[home], t + ltx_true + self.lan)
+            self.metro_busy[home] = st + self.payload_bits[i] / self.metro_rate
+            r = self.metro_busy[home] + self.metro_delay
+            self.e_net[i] = self.payload_bits[i] * self.j_bit
+            self.remote[i] = True
         elif tier == T_OTHER_MOB:
-            self._start_drive(s, home, t, self.drive_noise[i])
+            self.e_move[i] = self._start_drive(s, home, t, self.drive_noise[i])
             self.relocated[i] = True
             r = self.arrive_t[s] + ltx_true
         elif self.site[s] == DRIVING:
@@ -596,7 +797,7 @@ class EdgeEnv:
             self.pos[arrived] = self.centers[self.dest[arrived]]
             self._recompute_site_cap()
 
-    def _start_drive(self, s: int, dest: int, t: float, noise: float = 1.0) -> None:
+    def _start_drive(self, s: int, dest: int, t: float, noise: float = 1.0) -> float:
         d_m = math.hypot(self.pos[s, 0] - self.centers[dest, 0], self.pos[s, 1] - self.centers[dest, 1]) \
             * self.road * 1000.0
         self.site[s] = DRIVING
@@ -607,6 +808,7 @@ class EdgeEnv:
         self.move_j += self.j_drive * d_m
         self.n_moves += 1
         self._recompute_site_cap()
+        return self.j_drive * d_m
 
     def _builtin_slow(self, t: float) -> None:
         if self.mobility == "distress":
@@ -618,12 +820,20 @@ class EdgeEnv:
         b = self.site_backlog_s()
         nrun = self.cores - self.free
         work = np.maximum(self.run_ef_sum - nrun * t, 0.0) + self.q_cyc.sum(1) / self.f_core
+        # Energy-aware variant: a site must stay distressed for several slow steps before a mobile drives in, and
+        # the nearest calm neighbour gives one up (EdgePlus: first distressed step, calmest neighbour).
+        self.distress_cnt = np.where(b > mo["distress_hi_s"], self.distress_cnt + 1, 0)
+        cx = self.centers
         moved, donors_used = 0, set()
         for c in np.argsort(-b):
             if b[c] <= mo["distress_hi_s"] or moved >= mo["max_moves_per_step"]:
                 break
+            if self.distress_cnt[c] < self.distress_persist:
+                continue
             donors = [n for n in self.neighbors[c] if b[n] < mo["distress_lo_s"] and n not in donors_used]
-            for n in sorted(donors, key=lambda x: b[x]):
+            key = (lambda x: math.hypot(cx[x, 0] - cx[c, 0], cx[x, 1] - cx[c, 1])) if self.donor_near \
+                else (lambda x: b[x])
+            for n in sorted(donors, key=key):
                 cand = np.flatnonzero(self.is_mob & (self.site == n) & (self.battery >= self.bat_floor))
                 if cand.size:
                     m = int(cand[np.argmin(work[cand])])

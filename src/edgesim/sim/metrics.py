@@ -52,9 +52,26 @@ def summarize(env: EdgeEnv) -> dict:
         "energy_compute_j": float(env.e_comp.sum()),
         "energy_network_j": float(env.e_tx.sum() + env.e_net.sum()),
         "km_driven": float(env.km_driven), "drive_energy_j": float(env.move_j),
+        "energy_total_j": float(env.e_tx.sum() + env.e_comp.sum() + env.e_net.sum() + env.move_j),
+        "energy_per_task_j": float((env.e_tx.sum() + env.e_comp.sum() + env.e_net.sum() + env.move_j) / max(n, 1)),
+        "dvfs_slowed": float((env.dvfs_lvl[ex] < 1.0).mean()) if ex.any() else 0.0,
         "mobile_moves": int(env.n_moves), "distress_moves": int(env.n_distress_moves),
         "makespan_s": float(np.nanmax(env.finish_t)) if np.isfinite(env.finish_t).any() else float("nan"),
     }
+    if env.ledger_on and env.ledger_mode == "blocks":
+        w = env.lg_write_t
+        good = np.isfinite(w) & np.isfinite(env.commit_t)
+        com = env.commit_t[good] - w[good]
+        fin = env.final_t[good] - w[good]
+        work_s = float(np.nansum(env.finish_t[ex] - env.start_t[ex])) if ex.any() else 1.0
+        out.update({
+            "ledger_commit_p50_s": _pct(com, 50), "ledger_commit_p95_s": _pct(com, 95),
+            "ledger_commit_mean_s": float(com.mean()) if com.size else float("nan"),
+            "ledger_final_p50_s": _pct(fin, 50), "ledger_final_p95_s": _pct(fin, 95),
+            "ledger_blocks": int(env.lg_blocks), "ledger_rounds": int(env.lg_rounds),
+            "ledger_cpu_s": float(env.lg_cpu),
+            "ledger_cpu_share": float(env.lg_cpu / max(work_s, 1e-9)),   # ledger CPU time / task CPU time
+        })
     for k, name in enumerate(SLICE_NAMES):
         m = env.slice == k
         out[f"success_{name}"] = float(ok[m].mean()) if m.any() else float("nan")

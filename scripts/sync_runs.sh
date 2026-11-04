@@ -12,7 +12,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BRANCH=runs-mirror
 WT="$(dirname "$ROOT")/.runs-mirror-worktree"
-KEEP_CKPT='^(A[0-9]_[a-z_]+|A1_relgate|ccppo_lagr|ensemble_ppo|fd3qn|ddpg|sac|chorus[a-z0-9_]*)_s[0-9]+$|^w1_bc$'
+KEEP_CKPT='^(A[0-9]_[a-z_]+|A1_relgate|ccppo_lagr|ensemble_ppo|fd3qn|ddpg|sac|edgeplus[a-z0-9_]*)_s[0-9]+$|^w1_bc$'
 
 cd "$ROOT"
 cleanup() { git worktree remove --force "$WT" >/dev/null 2>&1 || rm -rf "$WT"; git worktree prune; }

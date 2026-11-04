@@ -1,6 +1,6 @@
 # Shared simulator: specification, validation, calibration, baselines (milestone M2)
 
-Every scheduler in this project (the EdgePlus reproduction, its baselines, rule-based dispatchers, and CHORUS) runs in this simulator. Same code, same task streams, same random draws.
+Every scheduler in this project (the EdgePlus reproduction, its baselines, rule-based dispatchers, and EdgePlus-PEC) runs in this simulator. Same code, same task streams, same random draws.
 
 - Code: `src/edgesim/sim/` (`env.py` is the core), dispatchers in `src/edgesim/agents/heuristics.py`.
 - Settings: `configs/sim.yaml` (simulator), `configs/topology.yaml` (servers), `configs/systems.yaml` (system presets), `configs/workload.yaml` (tasks).
@@ -76,7 +76,7 @@ For a task from site `c`, the candidates follow EdgePlus's routing order:
 When no server passes, the simulator decides by itself:
 
 - `best_effort` (EdgePlus): the lowest predicted latency, preferring servers still predicted to meet the deadline.
-- `reject` (EdgePlus+ and CHORUS): drop the task only if no server is predicted to meet its deadline (a hopeless task); otherwise behave like `best_effort`.
+- `reject` (EdgePlus+): drop the task only if no server is predicted to meet its deadline (a hopeless task); otherwise behave like `best_effort`.
 
 With exactly one option and no reject action, the simulator also decides automatically. Each empty mask is logged with the check that emptied it (`empty_by_*` in the KPIs).
 
@@ -86,7 +86,7 @@ With exactly one option and no reject action, the simulator also decides automat
 - **Mobility.**
   - `distress` (EdgePlus's redeployment, with straight-line routes instead of CBS–D* Lite): every 5 s, a site with more than 10 s of queued work per core pulls the least-loaded mobile from a neighbour that has less than 2 s; at most 2 moves per step.
   - Tier-2 assignments also relocate mobiles.
-  - `external` hands moves to an agent (CHORUS, milestone M5).
+  - `external` hands moves to an external controller.
 - **Ledger signals** (EdgePlus Eqs. 14, 28):
   - reputation per server: EMA with weight 0.05 of +1 (on time) or −1 (late);
   - debt per site: average on-time throughput minus the site's own, floored at 0, with a 30 s EWMA.
@@ -96,9 +96,9 @@ With exactly one option and no reject action, the simulator also decides automat
 
 | Predictor | Queue wait estimate | Where |
 |---|---|---|
-| `backlog` (default) | 0 if there are fewer busy and queued-ahead tasks than cores; otherwise expected remaining work ahead ÷ cores. Under slice priority, also divided by (1 − ρ of higher slices) to account for higher-priority work that arrives while the task waits. | EdgePlus (fair setting), EdgePlus+, CHORUS |
+| `backlog` (default) | 0 if there are fewer busy and queued-ahead tasks than cores; otherwise expected remaining work ahead ÷ cores. Under slice priority, also divided by (1 − ρ of higher slices) to account for higher-priority work that arrives while the task waits. | EdgePlus (fair setting), EdgePlus+, EdgePlus-PEC |
 | `kingman` | EdgePlus Eq. 31 in its M/G/c form (Sakasegawa): ρ^(√(2(c+1))−1) / (c(1−ρ)) · (c_a² + c_s²)/2 · E[S], using live utilization and online service statistics; ignores the current queue | `edgeplus_literal` |
-| calibrated | `backlog` plus an adaptive conformal margin per (slice, server kind) | CHORUS (`mask.calibrated`) |
+| calibrated | `backlog` plus an adaptive conformal margin per (slice, server kind) | optional (`mask.calibrated`), not used in the main comparison |
 
 The calibrated bound is `U = L̂ + q_g · max(L̂, 0.5 s)`:
 

@@ -468,13 +468,13 @@ One permutation-invariant policy over the Delaunay cluster graph, shared by all 
 
 **Recommendation.** N1 as the main contribution, I-1 to I-4 as the improvements chapter, and N2 if time allows.
 
-**Decision (4 Nov 2026).** The team chose a broader direction: our own multi-agent RL framework, CHORUS, specified in [`CHORUS_Design.md`](./CHORUS_Design.md). N1 becomes one of its modules (calibrated masks). I-1 to I-4 remain the improvements part of the paper.
+**Decision (4 Nov 2026, revised the same day).** The team first chose a separate multi-agent framework (CHORUS), then dropped it in favour of a narrower extension: EdgePlus-PEC, which keeps EdgePlus's scheduler and adds slice-priority queues (I-9), energy-aware execution and mobility, and faster ledger consensus. See [`HANDOFF.md`](./HANDOFF.md).
 
 ---
 
 ## 9. Roadmap
 
-The build plan now lives in [`CHORUS_Design.md`, Section 12](./CHORUS_Design.md#12-build-plan): milestones M1 (data and topology) to M7 (paper). The EdgePlus reproduction is milestone M3, and the improvements I-1 to I-4 are folded into the evaluation protocol there.
+The current plan and progress live in [`HANDOFF.md`](./HANDOFF.md).
 
 Compute: we benchmarked the sandbox (AMD EPYC, 4 physical cores with 8 threads, 30 GB RAM, no GPU). A simulator loop handles about 8,900 decisions per second per core; with a small policy network it handles about 1,250 per second one task at a time, or about 6,000 per second when 16 simulations run side by side. A PPO update on 8,192 decisions takes 3.7 s. One 3M-decision training run takes about 30 minutes on one core, and all final runs need about 25 to 35 core-hours. A GPU is not required.
 
@@ -483,11 +483,11 @@ Compute: we benchmarked the sandbox (AMD EPYC, 4 physical cores with 8 threads, 
 ## 10. Decisions (resolved 4 Nov 2026)
 
 1. **Timeline and length.** No fixed deadline. The paper should be 15 to 25 pages.
-2. **Contribution.** Our own MARL framework, CHORUS ([`CHORUS_Design.md`](./CHORUS_Design.md)), compared head-to-head with EdgePlus on the same data, then tested on a second dataset. Calibrated masks (N1) are one of its modules.
+2. **Contribution.** EdgePlus-PEC (EdgePlus plus priority queues, energy-aware execution and mobility, and faster ledger consensus), compared head-to-head with EdgePlus on the same data, then tested on a second dataset.
 3. **Reproduction scope.** Mobile routing simplified to grid A* or straight-line driving. No BFT, DKMS, or attack injection. OBJ7 reports measured cryptographic timings instead of "defense %".
 4. **Ground-truth queues.** Explicitly simulated queues; the Kingman formula is used only as the mask's predictor.
 5. **Compute.** The sandbox is enough (Section 9).
-6. **Second dataset.** AirDelhi, New Delhi ([`CHORUS_Design.md`, Section 8.2](./CHORUS_Design.md#82-dataset-b-airdelhi-new-delhi-the-unseen-test)).
+6. **Second dataset.** AirDelhi, New Delhi (real bus-mounted PM sensors; see the README).
 
 ---
 

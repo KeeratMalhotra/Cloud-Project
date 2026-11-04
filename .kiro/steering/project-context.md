@@ -4,7 +4,7 @@ inclusion: always
 
 # Cloud-Project: context for every session
 
-Research project: reproduce EdgePlus (multi-agent RL for 6G edge task allocation), propose our framework CHORUS, compare both on CityPulse and on the real AirDelhi dataset, then write a 15–25 page paper.
+Research project: reproduce EdgePlus (multi-agent RL for 6G edge task allocation), extend it as EdgePlus-PEC (priority queues, energy-aware execution and mobility, faster ledger consensus), compare both on CityPulse and on the real AirDelhi dataset, then write a 15–25 page paper.
 
 - Before doing anything, read `docs/HANDOFF.md`. It has the current state, the setup commands, and the next steps. Then run `python scripts/status.py` to see run progress from the files.
 - Don't rely on memory for numbers. Take them from `results/summary/*.json`, `runs/*/eval_*.csv`, and `scripts/status.py`, and say which file each comes from.

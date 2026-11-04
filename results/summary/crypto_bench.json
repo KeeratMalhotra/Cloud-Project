@@ -1,0 +1,19 @@
+{
+  "ed25519_sign_us": 27.348,
+  "ed25519_verify_us": 89.787,
+  "aesgcm_open_tuple_us": 0.449,
+  "tuple_bytes": 96,
+  "block_hash_us": {
+    "1": 1.146,
+    "16": 3.94,
+    "64": 12.672,
+    "128": 24.03,
+    "256": 46.655
+  },
+  "block_hash_fixed_us": 1.112,
+  "block_hash_per_tuple_us": 0.1782,
+  "machine": {
+    "cpu": "x86_64",
+    "python": "3.11.15"
+  }
+}

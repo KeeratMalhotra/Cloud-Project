@@ -1,12 +1,13 @@
-# Learned methods for the EdgePlus reproduction (EdgePlus Sec. IV-D, Table VI). Every method gets the same
-# training budget (decisions), the same episode stream, and the same warm start. `sim` overrides
-# configs/sim.yaml on top of the `system` preset; `ppo`, `reward`, and `advisory` override the trainer
-# defaults (advisory: null = off).
+# Learned methods (EdgePlus Sec. IV-D, Table VI). Every method gets the same training budget (decisions), the
+# same episode stream, and the same warm start. `system` picks the preset in configs/systems.yaml; `sim`
+# overrides configs/sim.yaml on top of it; `ppo`, `reward`, and `advisory` override the trainer defaults
+# (advisory: null = off).
 #
-# Shared protocol (chosen on CityPulse validation days, Nov 2026; see docs/EdgePlus_Reproduction.md):
-#   * warm start: the first 300k decisions follow greedy EFT and the actor imitates it; the imitation term
-#     then fades out over half of the remaining budget. Without it, PPO from scratch reached 61-66% at 150k
-#     against 80% for greedy EFT; with it, 79%.
+# Shared protocol (chosen on CityPulse validation days, Nov 2026):
+#   * warm start: the first 300k decisions follow greedy EFT and the actor imitates it; afterwards PPO trains
+#     with an imitation term of constant weight 0.3 (bc_decay_frac large = no decay). With the term fading to 0
+#     (the earlier protocol) PPO fine-tuning fell to 64-73% at 150k against 80% for greedy EFT; with weight 0.3
+#     the policy stayed at 79% (pilot runs p3a-p3d, docs/HANDOFF.md).
 #   * PPO: lr 3e-4, gamma 0.9, 1024 steps x 8 envs per update, entropy 0.003, latency weight 0.5.
 
 defaults:
@@ -18,11 +19,37 @@ defaults:
     steps_per_iter: 1024
     ent_coef: 0.003
     bc_decisions: 300000
+    bc_coef: 0.3
+    bc_decay_frac: 1000000.0
   reward: {eta_lat: 0.5}
   loads: {50000: 1, 100000: 1, 150000: 2}
 
 methods:
-  A1_full:            # full EdgePlus: masks, advisory, PSO (paper's SLA gate), ledger
+  # ---- main comparison: the same full EdgePlus scheduler on different systems
+  edgeplus:           # full EdgePlus (= A1): masks, advisory, PSO with the paper's gate, ledger feedback
+    system: edgeplus
+    advisory: {}
+    pso: {gate: paper}
+  edgeplus_pec:       # ours: EdgePlus + priority queues + energy-aware execution and mobility + fast consensus
+    system: edgeplus_pec
+    advisory: {}
+    pso: {gate: paper}
+  edgeplus_pq:        # ablation: + priority queues only
+    system: edgeplus_pq
+    advisory: {}
+    pso: {gate: paper}
+  edgeplus_energy:    # ablation: + energy-aware execution and mobility only
+    system: edgeplus_energy
+    advisory: {}
+    pso: {gate: paper}
+  edgeplus_cons:      # ablation: + fast consensus only
+    system: edgeplus_cons
+    advisory: {}
+    pso: {gate: paper}
+
+  # ---- EdgePlus ablations (Table VI). Seed-0 runs named <method>_s0 on runs-mirror used the earlier
+  # fading-imitation protocol; retraining them under the current defaults needs a new --run-name.
+  A1_full:
     advisory: {}
     pso: {gate: paper}
   A2_no_pso:
@@ -54,6 +81,6 @@ methods:
     advisory: null
     pso: null
     ppo: {per_site_actors: false, ensemble: 3}
-  A1_relgate:         # our improvement I-5: PSO accepts gains that raise success without raising cloud use
+  A1_relgate:         # review I-5: PSO accepts gains that raise success without raising cloud use
     advisory: {}
     pso: {gate: relative}
