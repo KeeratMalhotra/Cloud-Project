@@ -1,0 +1,87 @@
+# Shared simulator settings (docs/Simulator.md). System presets in configs/systems.yaml override parts of this.
+horizon_s: 600                   # arrivals span 600 s; the episode then runs until every admitted task finishes
+slow_step_s: 5.0                 # period of slow decisions (slice shares, mobile moves)
+
+capacity:
+  scale: 0.38                    # multiplies every core speed; calibrated on CityPulse validation days
+                                 # (scripts/calibrate_capacity.py): under the EdgePlus preset, local-first and
+                                 # greedy-EFT get 100% at 50k and 77-81% at 150k, the regime EdgePlus reports
+                                 # for its methods (79-83% at 150k)
+
+noise:                           # common random numbers: drawn per task from the episode seed
+  service: {dist: lognormal, sigma: 0.25, pareto_alpha: 2.5}   # dist: none | lognormal | pareto | exponential
+  tx_sigma: 0.2                  # lognormal factor on uplink time (fading)
+  drive_sigma: 0.1               # lognormal factor on driving time (traffic)
+
+network:                         # EdgePlus Eq. 30: R = zeta * W / reuse * log2(1 + SNR) * eta_mac * eta_backhaul
+  bw_mhz: [100, 400, 20]         # per slice: URLLC, eMBB, mMTC
+  zeta: [1.0, 1.0, 1.0]
+  reuse: 1.0
+  eta_mac: 0.8
+  eta_backhaul: 0.9
+  overhead: 1.1                  # eta_OH on payload
+  snr_ref_db: 25.0               # SNR at ref_dist_km from the serving small cell
+  ref_dist_km: 0.05
+  pathloss_exp: 2.5
+  snr_db_range: [0.0, 30.0]
+  cell_radius_km: 0.3            # device to nearest small cell: uniform over a disc of this radius
+  lan_delay_s: 0.0005            # site network, device uplink to edge server
+  backhaul_gbps: 1.0             # shared link to the cloud (FIFO)
+  wan_delay_s: 0.05              # one way, edge site to cloud region
+  downlink_s: [0.001, 0.001, 0.05]   # result return, by server kind: stationary, mobile, cloud
+  road_factor: 1.3               # driving distance = straight line x road_factor
+
+energy:
+  device_tx_w: 0.2
+  j_per_cycle: [2.0e-11, 3.0e-11, 1.0e-11]   # by kind: stationary, mobile, cloud
+  backhaul_j_per_bit: 2.0e-8
+  drive_j_per_m: 540.0           # about 0.15 kWh/km; reported separately from IT energy
+
+queue:
+  discipline: fifo               # fifo | slice_priority (URLLC > eMBB > mMTC, FIFO within a slice)
+  predictor: backlog             # backlog (current queue contents) | kingman (EdgePlus Eq. 31, M/G/c form)
+  kingman: {tau_s: 30.0, rho_max: 0.98, ca2: 1.0, cs2_init: 0.3}
+
+mask:
+  level: full                    # none (physical only) | routing (EdgePlus candidate set) | full (+ soft checks)
+  deadline: all                  # all | urllc | off
+  slice_budgets: true
+  quarantine: true               # URLLC: skip servers with reputation below ledger.rep_urllc_threshold
+  infeasible: best_effort        # empty mask: best_effort (min predicted latency) | reject
+  calibrated: false              # conformal bound instead of the point estimate in the deadline check
+  calibration:
+    score: relative              # relative: (L - L_hat) / max(L_hat, floor_s) | absolute: L - L_hat
+    floor_s: 0.5
+    window: 500
+    gamma: 0.005                 # adaptive conformal inference step
+    target_miss: [0.01, 0.05, 0.10]
+    refresh_every: 25
+    warmup: 50
+    init_q: 0.3
+
+dispatch:
+  allow_reject: false            # expose a REJECT action to the policy
+  auto_single: true              # decide automatically when exactly one option exists
+
+slices:
+  shares_compute: [0.15, 0.75, 0.10]   # per site, fraction of edge compute per slice (EdgePlus Eq. 4, per window)
+  shares_radio: [0.25, 0.55, 0.20]
+  window_s: 10.0
+  overbook: 1.0
+  airtime_per_site: 1.0          # radio seconds available per second at each site
+
+mobility:
+  mode: distress                 # none | distress (EdgePlus redeployment rule) | external
+  pull_on_assign: true           # assigning a task to a mobile parked elsewhere relocates it to the task's site
+  distress_hi_s: 10.0            # site backlog (s of work per core) above which a site is distressed
+  distress_lo_s: 2.0             # neighbour must be below this to give up a mobile
+  max_moves_per_step: 2
+  battery_reserve: 0.1
+
+ledger:
+  feedback: true                 # reputation and debt are tracked and used (EdgePlus Sec. III-H)
+  ema: 0.05
+  kappa: 1.0
+  rep_threshold: 0.6
+  rep_urllc_threshold: 0.7
+  debt_tau_s: 30.0

@@ -11,6 +11,8 @@ regimes:
   medium: 100000
   stress: 150000
 window_oversample: 1.2           # an episode window must hold at least 1.2 x N readings
+min_day_fraction: 0.5            # every day in a window holds at least half the median daily readings
+                                 # (seed k uses the k-th window of a fixed shuffle, so seeds cover distinct days)
 
 labels:
   winsor_quantile: 0.995

@@ -1,12 +1,18 @@
 # Sites and server inventory (same on every dataset so that only the data changes).
-# Server speeds and sizes are placeholders, calibrated in milestone M2.
+# Servers are multi-core: a task runs on one core. Core speeds are multiplied by capacity.scale in
+# configs/sim.yaml, which is calibrated in milestone M2 (scripts/calibrate_capacity.py).
 n_clusters: 10
 kmeans:
   seed: 39                       # EdgePlus seed for clusterer initialization
   n_init: 10
   max_iter: 300
 
+provisioning:
+  stationary: proportional       # equal | proportional (stationary cores follow each site's training-day task share)
+  floor_share: 0.3               # proportional: every site gets at least 30% of the mean share
+  min_cores: 2
+
 servers:
-  stationary: {per_cluster: 1, cpu_ghz: 20.0, mem_gb: 64}
-  mobile: {per_cluster: 2, cpu_ghz: 10.0, mem_gb: 32, speed_kmh: 120, battery_kwh: 2.0, offset_km: 0.3}
-  cloud: {count: 2, cpu_ghz: 100.0, mem_gb: 512}
+  stationary: {per_cluster: 1, cores: 16, ghz_per_core: 2.5, mem_gb: 64}
+  mobile: {per_cluster: 2, cores: 8, ghz_per_core: 2.0, mem_gb: 32, speed_kmh: 120, battery_kwh: 20, offset_km: 0.3}
+  cloud: {count: 2, cores: 32, ghz_per_core: 2.5, mem_gb: 512}   # a reserved cloud quota, same core speed as the edge

@@ -1,0 +1,147 @@
+{
+  "tasks_per_run": 200000,
+  "seeds": 5,
+  "warmup_fraction": 0.1,
+  "rows": [
+    {
+      "test": "M/M/c FIFO",
+      "cores": 1,
+      "rho": 0.5,
+      "metric": "wq",
+      "theory_s": 1.0,
+      "sim_s": 1.0018,
+      "ci95_s": 0.0097,
+      "rel_error": 0.0018
+    },
+    {
+      "test": "M/M/c FIFO",
+      "cores": 1,
+      "rho": 0.7,
+      "metric": "wq",
+      "theory_s": 2.3333,
+      "sim_s": 2.3247,
+      "ci95_s": 0.0348,
+      "rel_error": -0.0037
+    },
+    {
+      "test": "M/M/c FIFO",
+      "cores": 1,
+      "rho": 0.9,
+      "metric": "wq",
+      "theory_s": 9.0,
+      "sim_s": 8.8115,
+      "ci95_s": 0.2003,
+      "rel_error": -0.0209
+    },
+    {
+      "test": "M/M/c FIFO",
+      "cores": 4,
+      "rho": 0.5,
+      "metric": "wq",
+      "theory_s": 0.087,
+      "sim_s": 0.0866,
+      "ci95_s": 0.0015,
+      "rel_error": -0.0042
+    },
+    {
+      "test": "M/M/c FIFO",
+      "cores": 4,
+      "rho": 0.7,
+      "metric": "wq",
+      "theory_s": 0.3572,
+      "sim_s": 0.3547,
+      "ci95_s": 0.0079,
+      "rel_error": -0.0069
+    },
+    {
+      "test": "M/M/c FIFO",
+      "cores": 4,
+      "rho": 0.9,
+      "metric": "wq",
+      "theory_s": 1.9694,
+      "sim_s": 1.9237,
+      "ci95_s": 0.0478,
+      "rel_error": -0.0232
+    },
+    {
+      "test": "M/M/c FIFO",
+      "cores": 16,
+      "rho": 0.5,
+      "metric": "wq",
+      "theory_s": 0.0011,
+      "sim_s": 0.0011,
+      "ci95_s": 0.0001,
+      "rel_error": 0.0002
+    },
+    {
+      "test": "M/M/c FIFO",
+      "cores": 16,
+      "rho": 0.7,
+      "metric": "wq",
+      "theory_s": 0.027,
+      "sim_s": 0.0263,
+      "ci95_s": 0.001,
+      "rel_error": -0.0247
+    },
+    {
+      "test": "M/M/c FIFO",
+      "cores": 16,
+      "rho": 0.9,
+      "metric": "wq",
+      "theory_s": 0.3696,
+      "sim_s": 0.3599,
+      "ci95_s": 0.0094,
+      "rel_error": -0.0263
+    },
+    {
+      "test": "M/G/1 FIFO (lognormal sigma=1)",
+      "cores": 1,
+      "rho": 0.5,
+      "metric": "wq",
+      "theory_s": 1.3591,
+      "sim_s": 1.3336,
+      "ci95_s": 0.025,
+      "rel_error": -0.0188
+    },
+    {
+      "test": "M/G/1 FIFO (lognormal sigma=1)",
+      "cores": 1,
+      "rho": 0.7,
+      "metric": "wq",
+      "theory_s": 3.1713,
+      "sim_s": 3.0903,
+      "ci95_s": 0.0801,
+      "rel_error": -0.0255
+    },
+    {
+      "test": "M/G/1 FIFO (lognormal sigma=1)",
+      "cores": 1,
+      "rho": 0.9,
+      "metric": "wq",
+      "theory_s": 12.2323,
+      "sim_s": 11.6682,
+      "ci95_s": 0.9612,
+      "rel_error": -0.0461
+    },
+    {
+      "test": "M/M/1 priority (2 classes)",
+      "cores": 1,
+      "rho": 0.8,
+      "metric": "wq_high",
+      "theory_s": 1.3333,
+      "sim_s": 1.3337,
+      "ci95_s": 0.0077,
+      "rel_error": 0.0003
+    },
+    {
+      "test": "M/M/1 priority (2 classes)",
+      "cores": 1,
+      "rho": 0.8,
+      "metric": "wq_low",
+      "theory_s": 6.6667,
+      "sim_s": 6.603,
+      "ci95_s": 0.1059,
+      "rel_error": -0.0095
+    }
+  ]
+}

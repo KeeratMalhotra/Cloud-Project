@@ -2,7 +2,7 @@
 
 **CHORUS** (working name): Coordinated Hierarchical Orchestration with Reliability-aware, Uncertainty-calibrated Scheduling. It is our multi-agent RL framework for task allocation in 6G edge-cloud systems, designed to fix the limitations we found in EdgePlus.
 
-- Status: direction agreed on 4 Nov 2026. Milestone M1 (data and topology) is done; next is M2, the simulator core (Section 12).
+- Status: direction agreed on 4 Nov 2026. Milestones M1 (data and topology) and M2 (shared simulator, see [`Simulator.md`](./Simulator.md)) are done; next is M3, the EdgePlus reproduction (Section 12).
 - References like "deep review 5.4.2" point to [`EdgePlus_Deep_Review.md`](./EdgePlus_Deep_Review.md) (section 5.4, item 2).
 - Paper target: 15 to 25 pages.
 
@@ -192,7 +192,7 @@ This makes EdgePlus Algorithm 3 concrete.
 2. **Severity.** Robust z-score per pollutant (median and MAD from training days), plus a rise flag from the change over Δt (5 min for A, 1 min for B). Severity = max z + 1.0 × rise flag.
 3. **Tier.** Two modes (`slice_mode` in `configs/workload.yaml`):
    - `fixed` (default): inside each episode, the 20% most severe readings become Immediate (URLLC), the 30% least severe become Delayed (mMTC), and the rest Routine (eMBB). This keeps EdgePlus Table IV's fixed shares, so load is the only thing that changes between regimes.
-   - `natural`: thresholds at the 30th and 80th percentiles of training-day severity, so the mix follows the day's pollution. Used as a stress variant: on the Delhi test day of the sample episode (16 Jan 2021) it gives 31% URLLC, 66% eMBB, and 3.5% mMTC.
+   - `natural`: thresholds at the 30th and 80th percentiles of training-day severity, so the mix follows the day's pollution. Used as a stress variant: on the Delhi test day of the seed-0 sample episode (22 Jan 2021) it gives 26% URLLC, 68% eMBB, and 6% mMTC.
 4. **Priority.** High, Moderate, or Low from severity, with hysteresis per sensor.
 5. **Footprints.** Per-class lognormal payload, cycles, and memory, scaled up with severity. These are our assumptions (EdgePlus gives none) and are calibrated in M2.
 6. **Deadline.** Uniform in the tier's band (URLLC 5–15 s, eMBB 30–120 s, mMTC 120–600 s).
@@ -200,7 +200,7 @@ This makes EdgePlus Algorithm 3 concrete.
 
 ### 8.4 Measured properties (milestone M1)
 
-From `results/summary/<dataset>_dataset.json` (sample episodes: test split, seed 0).
+Dataset statistics come from `results/summary/<dataset>_dataset.json`. Arrival variation and site imbalance were measured on the five 150k-task test episodes (seeds 0 to 4, one test window each).
 
 | Property | A: CityPulse | B: AirDelhi |
 |---|---|---|
@@ -209,10 +209,10 @@ From `results/summary/<dataset>_dataset.json` (sample episodes: test split, seed
 | Days (train / val / test) | 40 / 10 / 12 | 54 / 7 / 30 |
 | Area used | 10 × 10 km (rescaled) | 21.6 × 25.8 km (true scale) |
 | Points clustered into sites | 449 sites | 4,815 cells of 100 m |
-| Variation of arrivals per second (CV) | 0.05 to 0.10 | 0.31 at every load |
-| Busiest site's task share, relative to the mean | 2.1× | 3.3× |
+| Variation of arrivals per second (CV) at 150k | 0.05 (0.10 at 50k) | 0.27 to 0.35 |
+| Busiest site's task share, relative to the mean | 2.1× | 3.2× to 3.6× |
 
-The CityPulse arrival variation matches a Poisson stream (1/√250 ≈ 0.063 at 250 tasks/s), so its load is steady. AirDelhi's stays at 0.31 at all three loads because the rate itself changes over time (bus routes and rush hours), and one Delhi site receives a third of all tasks. These are the conditions the design targets: bursty arrivals and uneven sites.
+The CityPulse arrival variation is at or below that of a Poisson stream (1/√250 ≈ 0.063 at 250 tasks/s), so its load is steady. AirDelhi's stays around 0.3 at every load because the rate itself changes over time (bus routes and rush hours), and one Delhi site receives about a third of all tasks. These are the conditions the design targets: bursty arrivals and uneven sites.
 
 Figures: `docs/figures/{citypulse,airdelhi}_{topology,arrivals,severity}.png`.
 
@@ -279,7 +279,7 @@ We report the outcome of every test, including the ones that go against us.
 
 | Risk | Mitigation |
 |---|---|
-| T1 gains are small: EdgePlus and its baselines sit within about 1 pp of each other at 150k | The main claims rest on T2 to T4; T1 is reported as is |
+| T1 gains are small: EdgePlus and its baselines sit within about 1 pp of each other at 150k. In our simulator, greedy EFT already reaches 80.6% at 150k on CityPulse, inside EdgePlus's reported band | The main claims rest on T2 to T4; T1 is reported as is, with greedy EFT as the bar every learned method must clear |
 | Two-timescale training is unstable | Staged training, a lower learning rate for slow agents, and heuristic orchestration as a fallback |
 | "You beat a weak EdgePlus" | Equal budgets, EdgePlus+ variants, and released code |
 | Calibration is biased by the policy's own choices | Report observed coverage per group; adaptive conformal inference keeps its long-run guarantee regardless |
@@ -292,7 +292,7 @@ We report the outcome of every test, including the ones that go against us.
 | Milestone | Content | Output |
 |---|---|---|
 | M1 (done) | Project skeleton, data pipelines for A and B, topology | labeled readings, maps, dataset summaries |
-| M2 | Simulator core (queues, latency, slices, masks, ledger signals, KPIs), heuristic baselines, load calibration | heuristic results at 50k/100k/150k |
+| M2 (done) | Simulator core (queues, latency, slices, masks, ledger signals, KPIs), heuristic baselines, load calibration | heuristic results at 50k/100k/150k ([`Simulator.md`](./Simulator.md)) |
 | M3 | EdgePlus reproduction: CCPPO, advisory, ledger, PSO, learned baselines, A1–A6 | OBJ1–OBJ5 tables and figures |
 | M4 | CHORUS stage S1: dispatcher, rejection, Lagrange multipliers, calibrated masks | T1 and part of T2 |
 | M5 | CHORUS stages S2–S3: orchestrators, mobile agents, messages | full T2 and ablations |

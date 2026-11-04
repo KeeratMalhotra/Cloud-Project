@@ -93,8 +93,10 @@ def main() -> None:
                                                          topo_cfg["n_clusters"], km["seed"], km["n_init"],
                                                          km["max_iter"])
     neighbors = topology.delaunay_neighbors(centers)
-    servers = topology.build_servers(centers, topo_cfg)
     df["home"] = topology.nearest_site(df["x_km"].to_numpy(), df["y_km"].to_numpy(), centers)
+    train_home = df.loc[df["split"] == "train", "home"].to_numpy(np.int64)
+    train_site_shares = np.bincount(train_home, minlength=len(centers)) / max(len(train_home), 1)
+    servers = topology.build_servers(centers, topo_cfg, train_site_shares)
     logging.info("topology: %d sites, mean degree %.2f", len(centers), np.mean([len(n) for n in neighbors]))
 
     out = processed_dir(name)
@@ -104,7 +106,8 @@ def main() -> None:
     df[cols].to_parquet(out / "readings.parquet", compression="zstd", index=False)
     (out / "label_params.json").write_text(json.dumps(params.to_dict(), indent=2))
     topo_json = {"frame": frame.to_dict(), "extent_km": frame.extent_km, "centers_km": centers.round(4).tolist(),
-                 "neighbors": neighbors, "kmeans_inertia": inertia, "n_points": int(len(pts))}
+                 "neighbors": neighbors, "kmeans_inertia": inertia, "n_points": int(len(pts)),
+                 "train_site_shares": train_site_shares.round(6).tolist()}
     (out / "topology.json").write_text(json.dumps(topo_json, indent=2))
     servers.to_csv(out / "servers.csv", index=False)
 
@@ -150,6 +153,8 @@ def main() -> None:
         "topology": {"n_sites": int(len(centers)), "neighbors": neighbors,
                      "mean_degree": float(np.mean([len(n) for n in neighbors])),
                      "centers_km": centers.round(3).tolist(), "points": int(len(pts)),
+                     "train_site_shares": train_site_shares.round(4).tolist(),
+                     "stationary_cores": servers.loc[servers["kind"] == "stationary", "cores"].tolist(),
                      "servers": servers["kind"].value_counts().to_dict()},
         "episodes": ep_summary, "slices": list(SLICES), "runtime_s": round(time.monotonic() - t0, 1),
     }

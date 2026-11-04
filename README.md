@@ -13,6 +13,7 @@ Research project with three parts:
 | [`docs/EdgePlus_Explained.md`](docs/EdgePlus_Explained.md) | Beginner-friendly walkthrough of the base paper |
 | [`docs/EdgePlus_Deep_Review.md`](docs/EdgePlus_Deep_Review.md) | Full technical spec, reported numbers, issues found, decisions |
 | [`docs/CHORUS_Design.md`](docs/CHORUS_Design.md) | Our framework: agents, learning, datasets, evaluation protocol, build plan |
+| [`docs/Simulator.md`](docs/Simulator.md) | Shared simulator: model, EdgePlus interpretations, validation, calibration, rule-based baselines |
 
 ## Setup
 
@@ -47,22 +48,35 @@ Outputs:
 - `results/summary/<dataset>_dataset.json`: dataset statistics.
 - `docs/figures/<dataset>_*.png`: topology, arrivals, and severity figures.
 
+## Simulator and baselines
+
+```bash
+.venv/bin/python scripts/validate_simulator.py                  # queue engine vs Erlang C, Pollaczek-Khinchine, Cobham
+.venv/bin/python scripts/calibrate_capacity.py --dataset citypulse
+.venv/bin/python scripts/run_heuristics.py --dataset citypulse --regimes stress --seeds 0 1 2 3 4
+```
+
+Details and results: [`docs/Simulator.md`](docs/Simulator.md).
+
 ## Layout
 
 ```
-configs/            YAML settings: datasets, workload (task generation), topology (sites and servers)
+configs/            YAML settings: datasets, workload, topology, simulator (sim.yaml), system presets (systems.yaml)
 src/edgesim/        shared package
   data/             loaders (citypulse, airdelhi), mirror, labeling, episode builder
+  sim/              event-driven simulator: world, radio, calibration, env (core), metrics
+  agents/           rule-based dispatchers (learned agents from milestone M3)
   topology.py       city frame, weighted K-means sites, Delaunay neighbours, server inventory
+  runner.py         episode loading and running; experiments.py runs grids in parallel
   plots.py          figures
 scripts/            command-line entry points
-docs/               papers, reviews, design, figures
+docs/               papers, reviews, design, simulator, figures
 results/summary/    committed result summaries
 ```
 
 ## Status
 
-Milestone M1 (data pipelines and topology) is done. Next is M2: the simulator core and heuristic baselines. See the build plan in [`docs/CHORUS_Design.md`](docs/CHORUS_Design.md#12-build-plan).
+Milestones M1 (data and topology) and M2 (shared simulator, validation, calibration, rule-based baselines) are done. Next is M3: the EdgePlus reproduction. See the build plan in [`docs/CHORUS_Design.md`](docs/CHORUS_Design.md#12-build-plan).
 
 ## Data sources and licenses
 
