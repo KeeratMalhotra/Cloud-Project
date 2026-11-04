@@ -225,6 +225,9 @@ def figures(result: dict) -> None:
             ax.set_xticklabels(xs, rotation=35, ha="right", fontsize=7)
             ax.set_title(f"{ds}, 150k tasks", fontsize=9)
             ax.set_ylabel(ylabel, fontsize=8)
+            if metric.startswith("energy"):  # spans 0.02 to 200 MJ
+                ax.set_yscale("log")
+                ax.set_ylabel(ylabel + ", log scale", fontsize=8)
             ax.grid(axis="y", alpha=0.3)
         fig.tight_layout()
         fig.savefig(fig_dir / f"{fname}.png", dpi=150)

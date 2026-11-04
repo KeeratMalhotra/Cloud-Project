@@ -1,1 +1,1 @@
-"""Schedulers: rule-based dispatchers now; learned agents (EdgePlus, CHORUS) from milestone M3."""
+"""Schedulers: rule-based dispatchers and the EdgePlus learner (CCPPO, advisory layer, PSO)."""

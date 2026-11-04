@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "edgesim"
 version = "0.1.0"
-description = "Shared 6G edge-cloud simulator, datasets, and agents for the EdgePlus reproduction and CHORUS"
+description = "Shared 6G edge-cloud simulator, datasets, and agents for the EdgePlus reproduction and EdgePlus-PEC"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

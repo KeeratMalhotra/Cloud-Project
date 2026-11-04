@@ -1,6 +1,6 @@
 """Cleaning and labeling of sensor readings (EdgePlus Algorithm 3, made concrete).
 
-Steps (docs/CHORUS_Design.md, section 8.3):
+Steps (EdgePlus Alg. 3; docs/EdgePlus_Deep_Review.md, Section 2.11):
   1. clean: drop missing and non-physical values, duplicates; sort by sensor and time
   2. severity: robust z-score per pollutant (median/MAD from training days) plus a rise flag
   3. tier -> slice: thresholds at training-day severity quantiles (about 20% URLLC, 50% eMBB, 30% mMTC)

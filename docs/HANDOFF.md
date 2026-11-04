@@ -31,7 +31,7 @@ If this file and the files disagree, the files win.
 A research paper of 15 to 25 pages with three parts:
 
 1. **Reproduce the base paper**, EdgePlus (Taher et al., IEEE Internet of Things Journal 13(8), 2026): multi-agent RL (CCPPO) that assigns air-quality IoT tasks to edge, mobile, and cloud servers in a simulated 6G city.
-2. **Propose our own framework, CHORUS**, and show it beats EdgePlus under identical conditions.
+2. **Extend it as EdgePlus-PEC**: slice-priority queues (P), energy-aware execution and mobility (E), and faster ledger consensus (C), with EdgePlus's scheduler unchanged, and compare the two under identical conditions. An earlier plan for a separate framework (CHORUS) was dropped on 4 Nov 2026.
 3. **Test both on a second, real dataset from New Delhi** (AirDelhi) that neither was tuned on.
 
 The base paper and a background review are in `docs/`. The paper's numbers, gaps, and errors are analysed in `docs/EdgePlus_Deep_Review.md`.
@@ -45,7 +45,7 @@ GitHub repository: <https://github.com/KeeratMalhotra/Cloud-Project>
 | Branch | Content | State |
 |---|---|---|
 | `main` | Docs, data pipeline (M1), simulator (M2) | PRs #1–#4 merged |
-| `feat/m3-edgeplus` | M3 work in progress: learners, warm start, PSO, training scripts, this file | pushed, draft PR #5 |
+| `feat/m3-edgeplus` | EdgePlus reproduction, EdgePlus-PEC, training and evaluation scripts, paper draft, this file | pushed, draft PR #5 |
 | `data-mirror` | Parquet copies of both datasets with SHA-256 checksums (210 MB, separate history) | complete |
 | `runs-mirror` | Training runs: checkpoints, logs, PSO records, evaluations (separate history) | updated after each batch |
 
@@ -55,7 +55,8 @@ GitHub repository: <https://github.com/KeeratMalhotra/Cloud-Project>
 |---|---|
 | `docs/EdgePlus_Explained.md` | Plain-language walkthrough of the base paper |
 | `docs/EdgePlus_Deep_Review.md` | Full spec of EdgePlus, every reported number, issues found, decisions |
-| `docs/CHORUS_Design.md` | Our framework, datasets, evaluation protocol, milestones M1–M7 |
+| `paper/EdgePlus-PEC_draft.md` | Paper draft: reproduction, EdgePlus-PEC, results on CityPulse and AirDelhi |
+| `results/summary/pec_comparison.md` | EdgePlus vs EdgePlus-PEC tables with CIs and paired tests (written by `scripts/compare.py`) |
 | `docs/Simulator.md` | Simulator model, how we read EdgePlus where it is silent, validation, calibration, rule-based results |
 | `docs/HANDOFF.md` | This file |
 
@@ -68,8 +69,8 @@ GitHub repository: <https://github.com/KeeratMalhotra/Cloud-Project>
 | `src/edgesim/sim/` | `env.py` (event-driven simulator), `world.py`, `radio.py`, `calibration.py` (conformal), `metrics.py`, `config.py` |
 | `src/edgesim/agents/` | `heuristics.py` (5 rules), `features.py` (observations), `rl.py` (rewards, delayed-reward buffer, parallel envs), `ccppo.py` (EdgePlus learner and trainer), `advisory.py` (Nash/PID/leader), `pso.py` |
 | `src/edgesim/` | `runner.py`, `experiments.py` |
-| `scripts/` | `download_data.py`, `prepare_data.py`, `validate_simulator.py`, `calibrate_capacity.py`, `run_heuristics.py`, `train.py`, `launch.py`, `evaluate.py`, `status.py`, `sync_runs.sh`, `build_data_mirror.py` |
-| `results/summary/` | committed JSON summaries: datasets, validation, calibration, rule-based results |
+| `scripts/` | `download_data.py`, `prepare_data.py`, `validate_simulator.py`, `calibrate_capacity.py`, `run_heuristics.py`, `train.py`, `launch.py`, `evaluate.py`, `compare.py` (statistics and figures), `bench_crypto.py`, `smoke_systems.py`, `status.py`, `sync_runs.sh`, `build_data_mirror.py` |
+| `results/summary/` | committed summaries: datasets, validation, calibration, rule-based results, crypto timings, EdgePlus vs EdgePlus-PEC |
 | `runs/` | training runs; ignored by git, saved to `runs-mirror` |
 
 ## 3. Setting up a fresh session
@@ -103,11 +104,10 @@ Run `status.py` only after `sync_runs.sh pull` has finished; started at the same
 |---|---|---|
 | M1 | Data pipelines, labeling, sites, episodes for both datasets | done (PR #3) |
 | M2 | Shared simulator, validation, capacity calibration, rule-based baselines | done (PR #4) |
-| M3 | EdgePlus reproduction: CCPPO, advisory, PSO, ledger signals, baselines, ablations | in progress, see Section 5 |
-| M4 | CHORUS stage 1: dispatcher, rejection, Lagrange multipliers, calibrated masks | not started |
-| M5 | CHORUS stages 2–3: orchestrators, mobile agents, graph messages | not started |
-| M6 | Delhi transfer and stress tests | not started |
-| M7 | Paper (15–25 pages) | not started |
+| M3 | EdgePlus reproduction: CCPPO, advisory, PSO, ledger signals (now timed), ablations | full EdgePlus (A1) done with 3 seeds under the current protocol; A2–A6 only under the earlier protocol; FD3QN, DDPG, SAC not implemented |
+| M4 | EdgePlus-PEC: priority queues, energy-aware execution and mobility, fast consensus | done: 3 seeds, plus 1 seed per single change |
+| M5 | Test days on CityPulse and AirDelhi (no retraining), statistics, figures | done at 150k (Section 5, first subsection) |
+| M6 | Paper | first draft: `paper/EdgePlus-PEC_draft.md` |
 
 ### Key facts from M1–M2
 
@@ -134,6 +134,37 @@ At 50k every method gets about 100%. EdgePlus reports 79.4–82.8% at 150k for i
 
 ## 5. Milestone M3 in detail
 
+### Main result: EdgePlus vs EdgePlus-PEC (4 Nov 2026)
+
+- **Runs.** Nine CCPPO runs of 1.5M decisions each, all under the current protocol (constant imitation weight 0.3), all trained on CityPulse training days:
+  - `edgeplus_s0`–`s2`: full EdgePlus (A1);
+  - `edgeplus_pec_s0`–`s2`: EdgePlus-PEC;
+  - one seed of each single change: `edgeplus_pq_s0`, `edgeplus_energy_s0`, `edgeplus_cons_s0`.
+
+  All nine are on `runs-mirror`, with test evaluations at 150k tasks, test seeds 0–4, in `eval_citypulse_test.csv` and `eval_airdelhi_test.csv`.
+- **Systems** (`configs/systems.yaml`):
+  - P: slice-priority queues;
+  - E: a neighbouring site's mobile serves in place over a metro link instead of driving over, redeployment is damped, and edge cores use slack-based DVFS;
+  - C: partial blocks are cut within 0.5 s and cloud BFT runs every 0.5 s.
+
+  The ledger is now timed (edge PoA commit, periodic cloud BFT, crypto costs from `results/summary/crypto_bench.json`). Reputation and debt change when a block commits.
+- **Results** (success at 150k; from `results/summary/pec_comparison.md`):
+
+  | System | CityPulse | AirDelhi (no retraining) |
+  |---|---|---|
+  | EdgePlus (3 seeds × 5 episodes) | 78.8% (URLLC 44.1%) | 54.9% (URLLC 24.9%) |
+  | EdgePlus-PEC (3 × 5) | 99.3% (URLLC 100%) | 76.3% (URLLC 98.6%) |
+  | + P / + E / + C alone (1 × 5) | 86.0 / 97.6 / 78.8% | 63.0 / 66.4 / 54.8% |
+  | greedy EFT on the EdgePlus / PEC system | 79.9 / 99.2% | 54.9 / 76.6% |
+
+- **Caveats stated in the paper:**
+  - Most of the gain comes from serve-in-place (part of E).
+  - The trained scheduler matches greedy EFT on both systems, so the gain comes from the system, not from learning.
+  - Costs: mMTC success falls 2.3 pp (CityPulse) and 12.5 pp (Delhi); Lp95 on Delhi rises from 152 s to 308 s; computing plus network energy rises 67%, though total energy falls because driving stops; ledger CPU time rises about 10×.
+  - C alone does not change success.
+  - EdgePlus's PSO gate rejected all 18 rounds.
+- **Provenance.** 30 of the 45 AirDelhi episodes (the six main runs) were written at 22:07–22:10 UTC by an evaluation call missing from the session transcript. Two of them were recomputed and matched exactly, so they were kept.
+
 ### What is built (branch `feat/m3-edgeplus`)
 
 - **CCPPO** (`src/edgesim/agents/ccppo.py`). One actor per site, implemented as stacked weights. Logits over all 32 servers, plus advisory biases, then a masked softmax. One centralized critic over local and global features. PPO with GAE, entropy bonus, optional KL penalty, and gradient clipping.
@@ -151,7 +182,7 @@ At 50k every method gets about 100%. EdgePlus reports 79.4–82.8% at 150k for i
 - **PPO settings:** lr 3e-4, γ = 0.9, 1,024 steps per environment per update, entropy 0.003.
 - **Warm start** (our addition, applied identically to every method, and it must be reported in the paper):
   - for the first 300k decisions the environments follow greedy EFT and the actor imitates it;
-  - after that PPO takes over, and the imitation weight fades from 1 to 0 over half of the remaining budget.
+  - after that PPO takes over, with an imitation term of constant weight 0.3 (`ppo.bc_coef: 0.3`, `bc_decay_frac: 1000000.0`). This was adopted on 4 Nov 2026 after the pilot in finding 3. Earlier runs used a weight fading from 1 to 0 over half of the remaining budget.
 - **Speed:** about 1,700–2,100 decisions per second per run, 4 runs in parallel. One run takes about 12–14 minutes, plus about 2.4 minutes per PSO round.
 
 ### Tuning history
@@ -167,7 +198,7 @@ All rows are A2-style (advisory on, no PSO), CityPulse validation days, 2 episod
 | 3 | Warm start (`w1_bc`, lr 3e-4) | 1.05M | **79.0%** |
 | 3 | Warm start with lr 1e-4 (`w2`–`w4`) | 1.05M | 70.8–73.0% |
 
-### Results of the current protocol (seed 0, CityPulse validation days, 2 episodes, success at 150k)
+### Results under the earlier protocol (imitation fading to 0; seed 0, CityPulse validation days, 2 episodes, success at 150k)
 
 All runs trained to 1.5M decisions. Numbers from `runs/citypulse/<run>/eval_citypulse_val.csv`; the greedy EFT row is from `results/summary/heuristics_citypulse_val.json` (same two episodes).
 
@@ -206,7 +237,7 @@ Every learned method is 7.6–15.7 pp below greedy EFT. These runs stay on `runs
 
    - Any imitation weight that stays above 0 keeps the policy at greedy EFT's level (78.8–79.3%), and the three such runs end with agreement 0.99–1.00. Once the weight reaches 0, success drops even if that happens only near the end (p3a). None of the runs beat greedy EFT.
    - `agree` is measured on the first 4,096 samples of each update, about half of the 8 environments, so treat it as a rough signal. p3a ends at 0.99 agreement but 72.3% success.
-   - **Options (decision needed; any protocol change means retraining every method):**
+   - **Options (decided 4 Nov 2026: constant weight 0.3, now the default in `configs/methods.yaml`):**
      - keep a constant imitation weight (for example `ppo.bc_coef: 0.3` with `bc_decay_frac` effectively infinite). Learned methods then stay close to greedy EFT, and differences between ablations will likely shrink;
      - keep the current protocol and report that PPO without the anchor loses 8–16 pp to greedy EFT;
      - keep the best checkpoint by validation (not implemented).
@@ -215,29 +246,26 @@ Every learned method is 7.6–15.7 pp below greedy EFT. These runs stay on `runs
 4. **Not implemented yet:**
    - the FD3QN, DDPG, and SAC baselines (EdgePlus compares against them);
    - the OBJ6 PID-robustness script;
-   - the OBJ7 crypto-timing benchmark;
-   - a statistics script (paired tests and bootstrap CIs across test episodes);
-   - `docs/EdgePlus_Reproduction.md`, which `configs/methods.yaml` already mentions.
+   - the OBJ7 attack experiments (only crypto timings are measured, `scripts/bench_crypto.py`).
+
+   Done since: paired statistics and bootstrap CIs (`scripts/compare.py`).
 
 ## 6. Next steps
 
 Run each command from the repo root. Each `launch.py` call stops itself after `--minutes`; repeat it until `status.py` shows 100%.
 
-1. ~~**Finish the seed-0 batch.**~~ Done 4 Nov 2026; results in Section 5.
-2. ~~**Train `A1_relgate --seed 0`.**~~ Done 4 Nov 2026; 68.7% at 150k (Section 5, finding 1).
-3. **Decide on open issue 3** (imitation weight). Pilot done, see finding 3; waiting for the team's decision. If the protocol changes, every method must be retrained with it (see "Run names" in finding 3).
-4. **Implement FD3QN, DDPG, and SAC** in `src/edgesim/agents/`:
-   - reuse `features.py`, the masks, the reward, and the warm start, so the comparison stays fair;
-   - add them to `methods.yaml` (`sync_runs.sh` already keeps their checkpoints).
-5. **Train seeds 1 and 2** for every method: the same commands with `--seed 1` and `--seed 2`.
-6. **Evaluate on test days**, 5 seeds, stress first. Repeat the same command until it reports 0 episodes to run:
-   ```bash
-   timeout --kill-after=10 600 .venv/bin/python scripts/evaluate.py --minutes 7 --runs runs/citypulse/A1_full_s0 runs/citypulse/A2_no_pso_s0 --split test --regimes stress --seeds 0 1 2 3 4
-   ```
-   One episode with a learned policy takes about 45–60 s. Four run in parallel, so about 25 episodes fit in one 7-minute call.
-7. **Statistics:** paired Wilcoxon tests and bootstrap CIs against greedy EFT and between methods. Use the same test episodes for every method; they are paired by seed.
-8. **Remaining pieces:** OBJ6 PID script, OBJ7 crypto timings, `docs/EdgePlus_Reproduction.md`. Then open the M3 PR.
-9. **M4–M7:** follow `docs/CHORUS_Design.md`, Section 12.
+1. ~~**Seed-0 batch, `A1_relgate`, imitation-weight pilot.**~~ Done 4 Nov 2026 (Section 5).
+2. ~~**EdgePlus vs EdgePlus-PEC.**~~ Done 4 Nov 2026: trained, tested on both datasets, statistics, figures, and paper draft (Section 5, first subsection).
+3. **Team review of `paper/EdgePlus-PEC_draft.md`**: title, authors, venue, and framing.
+4. **Strengthen the evidence**, most valuable first:
+   - Vary the metro link that serve-in-place relies on. Add presets in `configs/systems.yaml` with, for example, `network: {metro_gbps: 0.1}`, and run greedy EFT on them with `run_heuristics.py --systems ... --tag _metro`.
+   - Train seeds 1 and 2 for `edgeplus_pq`, `edgeplus_energy`, and `edgeplus_cons`.
+   - Evaluate the learned policies at 50k and 100k (`evaluate.py --regimes light medium`).
+   - Test DVFS alone, and deadline-aware ordering within slices to reduce the mMTC and tail-latency costs.
+
+   Each `launch.py` or `evaluate.py` call is one step: wrap it in `timeout --kill-after=10 600`, use `--minutes 7`, and repeat it until done (Section 7).
+5. **Optional:** FD3QN, DDPG, and SAC baselines; the OBJ6 PID script; A2–A6 retrained under the current protocol. Give the retrained runs names ending in `_bc_s<seed>`, so `sync_runs.sh` keeps their checkpoints.
+6. **Merge:** mark draft PR #5 ready and merge it into `main`.
 
 ## 7. Operating rules (read before running anything)
 

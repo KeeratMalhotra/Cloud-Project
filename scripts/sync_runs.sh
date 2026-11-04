@@ -6,7 +6,7 @@
 #
 # A run is copied only if the source copy is at least as far along as the destination copy (more lines in
 # log.jsonl, i.e. more PPO updates), so two sessions sharing the branch never overwrite newer progress.
-# Checkpoints are kept for the main runs (A1-A6, baselines, CHORUS) and for the warm-start reference run;
+# Checkpoints are kept for the main runs (A1-A6, baselines, EdgePlus and EdgePlus-PEC) and for the warm-start reference run;
 # tuning runs keep only their small files (config, logs, evaluations). Run from anywhere inside the repo.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
