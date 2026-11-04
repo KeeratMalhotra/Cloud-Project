@@ -173,7 +173,7 @@ All rows are A2-style (advisory on, no PSO), CityPulse validation days, 2 episod
 | `A2_no_pso_s0` | none | 69.1% |
 | `A3_no_advisory_s0` | none | 72.4% |
 | `A4_no_ledger_s0` | 2, both rejected | 70.4% |
-| `A5_no_masks_s0` | | training, 50% |
+| `A5_no_masks_s0` | first round due | training, 54% |
 | `A6_plain_ccppo_s0` | | training, 62% |
 | `ccppo_lagr_s0` | | training, 63% |
 | `ensemble_ppo_s0` | | training, 64% |
@@ -197,9 +197,9 @@ All rows are A2-style (advisory on, no PSO), CityPulse validation days, 2 episod
 
 Run each command from the repo root. Each `launch.py` call stops itself after `--minutes`; repeat it until `status.py` shows 100%.
 
-1. **Finish the seed-0 batch**, then save:
+1. **Finish the seed-0 batch**: repeat the first command until `status.py` shows 100% for all four (about 2 calls), then save with the second (a separate call):
    ```bash
-   .venv/bin/python scripts/launch.py --minutes 7 -- "--method A5_no_masks --seed 0" "--method A6_plain_ccppo --seed 0" "--method ccppo_lagr --seed 0" "--method ensemble_ppo --seed 0"
+   timeout --kill-after=10 600 .venv/bin/python scripts/launch.py --minutes 7 -- "--method A5_no_masks --seed 0" "--method A6_plain_ccppo --seed 0" "--method ccppo_lagr --seed 0" "--method ensemble_ppo --seed 0"
    bash scripts/sync_runs.sh push "seed-0 batch 2 progress"
    ```
 2. **Train `A1_relgate --seed 0`.**
@@ -208,11 +208,11 @@ Run each command from the repo root. Each `launch.py` call stops itself after `-
    - reuse `features.py`, the masks, the reward, and the warm start, so the comparison stays fair;
    - add them to `methods.yaml` (`sync_runs.sh` already keeps their checkpoints).
 5. **Train seeds 1 and 2** for every method: the same commands with `--seed 1` and `--seed 2`.
-6. **Evaluate on test days**, 5 seeds, stress first:
+6. **Evaluate on test days**, 5 seeds, stress first. Repeat the same command until it reports 0 episodes to run:
    ```bash
-   .venv/bin/python scripts/evaluate.py --runs runs/citypulse/A1_full_s0 runs/citypulse/A2_no_pso_s0 --split test --regimes stress --seeds 0 1 2 3 4
+   timeout --kill-after=10 600 .venv/bin/python scripts/evaluate.py --minutes 7 --runs runs/citypulse/A1_full_s0 runs/citypulse/A2_no_pso_s0 --split test --regimes stress --seeds 0 1 2 3 4
    ```
-   One 150k episode with a learned policy takes about 45 s. Four run in parallel.
+   One episode with a learned policy takes about 45–60 s. Four run in parallel, so about 25 episodes fit in one 7-minute call.
 7. **Statistics:** paired Wilcoxon tests and bootstrap CIs against greedy EFT and between methods. Use the same test episodes for every method; they are paired by seed.
 8. **Remaining pieces:** OBJ6 PID script, OBJ7 crypto timings, `docs/EdgePlus_Reproduction.md`. Then open the M3 PR.
 9. **M4–M7:** follow `docs/CHORUS_Design.md`, Section 12.
@@ -220,6 +220,10 @@ Run each command from the repo root. Each `launch.py` call stops itself after `-
 ## 7. Operating rules (read before running anything)
 
 - **Commands are capped at 30 minutes, and background processes die when the command returns.** Long work must be resumable. Use `launch.py --minutes 7` (at most 10) and repeat. Never use `nohup` or `&` for training.
+- **One step per command, always with a hard cap.** Never chain training, evaluation, and syncing in one call. Wrap each command in `timeout --kill-after=10 <seconds>`, with seconds = minutes × 60 + 180.
+  - **What the caps guarantee.** `train.py` stops at the first update after `--minutes`. It defers a due PSO round to the next call when less than 4 minutes remain. `launch.py` kills jobs at `--minutes` + 3. `evaluate.py --minutes 7` starts no new episode after 7 minutes, saves every episode as it finishes, and skips saved episodes on the next call.
+  - **So a 7-minute step should end within about 10 minutes.** If one runs past 15 minutes, interrupt it. At most about 1 minute of work is lost.
+  - **Then clean up and resume.** Check with `ps -eo args | grep -E "train.py|launch.py|evaluate.py"`, run `pkill -f train.py; pkill -f evaluate.py`, check `scripts/status.py`, and rerun the same command.
 - **A message sent while a command runs interrupts it.** Checkpoints survive (saved every 5 updates and at the end), so just rerun the same command. Tell the user how long each step takes before starting it.
 - **Save after every batch:** `bash scripts/sync_runs.sh push "what changed"`. Commit code changes to the branch and push.
 - **Never commit `runs/`, `data/`, or `.venv/`** (they are in `.gitignore`). Runs go to `runs-mirror`, data to `data-mirror`.

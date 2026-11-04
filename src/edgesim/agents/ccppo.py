@@ -364,6 +364,7 @@ class CCPPOTrainer:
         t_start = time.time()
         p = self.p
         self._budget = budget_decisions
+        self._deadline = t_start + 60 * max_minutes
         while self.state["decisions"] < budget_decisions and (time.time() - t_start) < 60 * max_minutes:
             t0 = time.time()
             for _ in range(p["steps_per_iter"]):
@@ -374,6 +375,7 @@ class CCPPOTrainer:
                               experts=experts, bc=bc)
             self.state["decisions"] += p["steps_per_iter"] * len(self.vec.envs)
             t1 = time.time()
+            self._maybe_pso(budget_decisions)  # first, so a deferred round runs at the start of the next call
             parts = self._gather()
             if not parts:
                 continue
@@ -402,7 +404,6 @@ class CCPPOTrainer:
             print(json.dumps(row), flush=True)
             if self.state["updates"] % ckpt_every == 0:
                 self.save_checkpoint()
-            self._maybe_pso(budget_decisions)
         self.save_checkpoint()
         return self.state
 
@@ -416,6 +417,8 @@ class CCPPOTrainer:
         r = self.state["pso_rounds"]
         if r >= len(at) or self.state["decisions"] < at[r] * budget:
             return
+        if time.time() + self.pso_cfg.get("reserve_s", 240) > getattr(self, "_deadline", float("inf")):
+            return  # not enough of this call's time budget left: the round runs at the start of the next call
         t0 = time.time()
         self.save_checkpoint()  # workers load the frozen policy from the checkpoint
         new, rec = pso_round(self.run_dir, self.cfg, self.dataset, self.adv_params,
