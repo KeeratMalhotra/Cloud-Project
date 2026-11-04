@@ -20,7 +20,7 @@ case "${1:-}" in
     msg="${2:-Update training runs}"
     cleanup
     if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
-      git fetch -q origin "$BRANCH"
+      git fetch -q origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
       git worktree add -q -B "$BRANCH" "$WT" "origin/$BRANCH"
     else
       git worktree add -q --detach "$WT"
@@ -54,7 +54,8 @@ EOF
     ;;
   pull)
     cleanup
-    git fetch -q origin "$BRANCH"
+    # explicit refspec: also works in clones made with --single-branch
+    git fetch -q origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
     git worktree add -q --detach "$WT" "origin/$BRANCH"
     mkdir -p runs
     cp -a -n "$WT/runs/." runs/ 2>/dev/null || cp -a "$WT/runs/." runs/
