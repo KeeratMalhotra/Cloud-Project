@@ -45,7 +45,7 @@ GitHub repository: <https://github.com/KeeratMalhotra/Cloud-Project>
 | Branch | Content | State |
 |---|---|---|
 | `main` | Docs, data pipeline (M1), simulator (M2) | PRs #1–#4 merged |
-| `feat/m3-edgeplus` | M3 work in progress: learners, warm start, PSO, training scripts, this file | pushed, no PR yet |
+| `feat/m3-edgeplus` | M3 work in progress: learners, warm start, PSO, training scripts, this file | pushed, draft PR #5 |
 | `data-mirror` | Parquet copies of both datasets with SHA-256 checksums (210 MB, separate history) | complete |
 | `runs-mirror` | Training runs: checkpoints, logs, PSO records, evaluations (separate history) | updated after each batch |
 
