@@ -91,7 +91,9 @@ bash scripts/sync_runs.sh pull                                  # restore all tr
 .venv/bin/python scripts/status.py                              # what is done and what is not
 ```
 
-Versions used here: Python 3.11.15, torch 2.15.0+cpu, numpy 2.4.6, pandas 3.1.0. In some sandboxes `pip install --user` fails because the home directory is read-only; the `.venv` route above works.
+Versions used here: Python 3.11.15, torch 2.15.0+cpu, numpy 2.4.6, pandas 3.1.0 (3.1.1 also works). In some sandboxes `pip install --user` fails because the home directory is read-only; the `.venv` route above works.
+
+Run `status.py` only after `sync_runs.sh pull` has finished; started at the same time, it prints "no runs found". `prepare_data.py` rewrites `results/summary/*_dataset.json`, changing only `runtime_s` and the last digit of one float; restore them with `git checkout -- results/summary/` rather than committing the change. Sandboxes can have 8 cores instead of 4 (`nproc`). With 5 jobs in one `launch.py` call on 8 cores, each run did about 0.5M decisions in 7 minutes.
 
 **Checks.** `prepare_data.py` is deterministic. The training split must have 5,172,031 rows for CityPulse and 5,826,328 for AirDelhi (`results/summary/*_dataset.json`).
 
@@ -167,25 +169,49 @@ All rows are A2-style (advisory on, no PSO), CityPulse validation days, 2 episod
 
 ### Results of the current protocol (seed 0, CityPulse validation days, 2 episodes, success at 150k)
 
-| Run | PSO rounds | Success at 150k |
-|---|---|---|
-| `A1_full_s0` | 2, both rejected | 67.9% |
-| `A2_no_pso_s0` | none | 69.1% |
-| `A3_no_advisory_s0` | none | 72.4% |
-| `A4_no_ledger_s0` | 2, both rejected | 70.4% |
-| `A5_no_masks_s0` | first round due | training, 54% |
-| `A6_plain_ccppo_s0` | | training, 62% |
-| `ccppo_lagr_s0` | | training, 63% |
-| `ensemble_ppo_s0` | | training, 64% |
+All runs trained to 1.5M decisions. Numbers from `runs/citypulse/<run>/eval_citypulse_val.csv`; the greedy EFT row is from `results/summary/heuristics_citypulse_val.json` (same two episodes).
+
+| Run | PSO rounds | Success at 150k | URLLC success | Cloud share |
+|---|---|---|---|---|
+| greedy EFT (rule) | | 80.1% (77.9 / 82.3) | 46.5% | 14.1% |
+| `A1_full_s0` | 2, both rejected | 67.9% | 25.8% | 16.0% |
+| `A1_relgate_s0` | 2, both accepted | 68.7% | 22.2% | 15.3% |
+| `A2_no_pso_s0` | none | 69.1% | 26.3% | 15.2% |
+| `A3_no_advisory_s0` | none | 72.4% | 32.2% | 14.9% |
+| `A4_no_ledger_s0` | 2, both rejected | 70.4% | 29.7% | 16.2% |
+| `A5_no_masks_s0` | 2, both rejected | 64.4% | 11.8% | 19.0% |
+| `A6_plain_ccppo_s0` | none | 72.5% | 23.4% | 17.1% |
+| `ccppo_lagr_s0` | none | 68.9% | 16.3% | 17.4% |
+| `ensemble_ppo_s0` | none | 71.0% | 31.5% | 15.1% |
+
+Every learned method is 7.6–15.7 pp below greedy EFT. These runs stay on `runs-mirror` whatever is decided on open issue 3.
 
 ### Findings and open issues
 
-1. **The paper's PSO gate never passes.** It requires failure ≤ 5% and stationary share ≥ 80%. On the PSO episodes, failures were about 3.5% but the stationary share was 39–40%, so every candidate was rejected (`runs/citypulse/A1_full_s0/pso.jsonl`). `A1_relgate` tests our relative gate. Not yet trained.
-2. **The add-ons do not help so far.** Removing the advisory layer gave the best seed-0 result. These are 2 episodes from one training seed, so this is not yet reliable.
-3. **PPO fine-tuning erodes the warm start.** `w1_bc` had 79.0% at 1.05M decisions; A1–A4 have 68–72% at 1.5M. In A2 and A3, agreement with greedy EFT falls from about 1.0 after the warm start to 0.72 and 0.62 at the end (`agree` in `log.jsonl`). Options to decide on:
-   - keep a small imitation weight (`ppo.bc_coef` with `bc_decay_frac: 1.0`);
-   - report as is;
-   - keep the best checkpoint by validation (not implemented, and it would change the protocol for every method).
+1. **The paper's PSO gate never passes.** It requires failure ≤ 5% and stationary share ≥ 80%. On the PSO episodes, failures were about 3.5% but the stationary share was 39–40%, so every candidate was rejected (`runs/citypulse/A1_full_s0/pso.jsonl`). A5 was rejected too: in round 1 no particle beat the baseline, and in round 2 the stationary share was 41% (`runs/citypulse/A5_no_masks_s0/pso.jsonl`).
+   - **Our relative gate (`A1_relgate`) accepted both rounds.** On the 200 s PSO episodes, success rose from 96.4% to 96.8% (round 1) and from 89.3% to 90.9% (round 2), with cloud share down 0.5 and 1.1 pp (`runs/citypulse/A1_relgate_s0/pso.jsonl`).
+   - On validation this gave 68.7% against 67.9% for `A1_full`. That is within the spread of two episodes from one seed, so the gate change does not yet show a measurable effect.
+2. **The add-ons do not help so far.** Removing the advisory layer (A3, 72.4%) or both masks and ledger (A6, 72.5%) gave the best seed-0 results. Removing only the masks (A5) gave the worst, 64.4%. These are 2 episodes from one training seed, so this is not yet reliable.
+3. **PPO fine-tuning erodes the warm start.** `w1_bc` had 79.0% at 1.05M decisions; A1–A6 and the baselines have 64–73% at 1.5M. In A2 and A3, agreement with greedy EFT falls from about 1.0 after the warm start to 0.72 and 0.62 at the end (`agree` in `log.jsonl`).
+   - **Pilot (4 Nov 2026).** Four A2-style runs (seed 0, 1.5M decisions, everything else as in the protocol) that keep the imitation term longer. Numbers from each run's `eval_citypulse_val.csv` and the last line of `log.jsonl`:
+
+     | Run | Imitation weight after the 300k warm start | Weight at the end | Success at 150k | URLLC |
+     |---|---|---|---|---|
+     | `A2_no_pso_s0` (current protocol) | fades 1 → 0 over half the remaining budget | 0 | 69.1% | 26.3% |
+     | `p3a_bcfade_full` (`ppo.bc_decay_frac=1.0`) | fades 1 → 0 over the whole remaining budget | 0 | 72.3% | 34.3% |
+     | `p3b_bcfade_x2` (`ppo.bc_decay_frac=2.0`) | fades 1 → 0.5 | 0.50 | 78.9% | 45.2% |
+     | `p3c_bc_const03` (`ppo.bc_coef=0.3`, no decay) | 0.3, constant | 0.30 | 79.3% | 46.0% |
+     | `p3d_bc_const1` (`ppo.bc_coef=1.0`, no decay) | 1.0, constant | 1.0 | 78.8% | 44.4% |
+     | greedy EFT (rule) | | | 80.1% | 46.5% |
+
+   - Any imitation weight that stays above 0 keeps the policy at greedy EFT's level (78.8–79.3%), and the three such runs end with agreement 0.99–1.00. Once the weight reaches 0, success drops even if that happens only near the end (p3a). None of the runs beat greedy EFT.
+   - `agree` is measured on the first 4,096 samples of each update, about half of the 8 environments, so treat it as a rough signal. p3a ends at 0.99 agreement but 72.3% success.
+   - **Options (decision needed; any protocol change means retraining every method):**
+     - keep a constant imitation weight (for example `ppo.bc_coef: 0.3` with `bc_decay_frac` effectively infinite). Learned methods then stay close to greedy EFT, and differences between ablations will likely shrink;
+     - keep the current protocol and report that PPO without the anchor loses 8–16 pp to greedy EFT;
+     - keep the best checkpoint by validation (not implemented).
+   - Whatever is chosen, the existing seed-0 runs under the fading protocol can be reported as a sensitivity result.
+   - **Run names.** Changing `configs/methods.yaml` defaults makes `train.py` refuse to resume the existing `<method>_s0` directories (config mismatch). New-protocol runs need new names (for example a `--run-name` suffix), and `KEEP_CKPT` in `sync_runs.sh` must match them, or the old runs must be renamed first.
 4. **Not implemented yet:**
    - the FD3QN, DDPG, and SAC baselines (EdgePlus compares against them);
    - the OBJ6 PID-robustness script;
@@ -197,13 +223,9 @@ All rows are A2-style (advisory on, no PSO), CityPulse validation days, 2 episod
 
 Run each command from the repo root. Each `launch.py` call stops itself after `--minutes`; repeat it until `status.py` shows 100%.
 
-1. **Finish the seed-0 batch**: repeat the first command until `status.py` shows 100% for all four (about 2 calls), then save with the second (a separate call):
-   ```bash
-   timeout --kill-after=10 600 .venv/bin/python scripts/launch.py --minutes 7 -- "--method A5_no_masks --seed 0" "--method A6_plain_ccppo --seed 0" "--method ccppo_lagr --seed 0" "--method ensemble_ppo --seed 0"
-   bash scripts/sync_runs.sh push "seed-0 batch 2 progress"
-   ```
-2. **Train `A1_relgate --seed 0`.**
-3. **Decide on open issue 3** (imitation weight). If the protocol changes, every method must be retrained with it.
+1. ~~**Finish the seed-0 batch.**~~ Done 4 Nov 2026; results in Section 5.
+2. ~~**Train `A1_relgate --seed 0`.**~~ Done 4 Nov 2026; 68.7% at 150k (Section 5, finding 1).
+3. **Decide on open issue 3** (imitation weight). Pilot done, see finding 3; waiting for the team's decision. If the protocol changes, every method must be retrained with it (see "Run names" in finding 3).
 4. **Implement FD3QN, DDPG, and SAC** in `src/edgesim/agents/`:
    - reuse `features.py`, the masks, the reward, and the warm start, so the comparison stays fair;
    - add them to `methods.yaml` (`sync_runs.sh` already keeps their checkpoints).
