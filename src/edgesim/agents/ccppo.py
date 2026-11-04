@@ -417,14 +417,10 @@ class CCPPOTrainer:
         if r >= len(at) or self.state["decisions"] < at[r] * budget:
             return
         t0 = time.time()
-
-        def make_agent(params):
-            return CCPPOAgent(self.model, params, self.C, self.S, greedy=True)
-
-        new, rec = pso_round(make_agent, self.world, self.cfg, self.dataset, self.adv_params,
+        self.save_checkpoint()  # workers load the frozen policy from the checkpoint
+        new, rec = pso_round(self.run_dir, self.cfg, self.dataset, self.adv_params,
                              self.pso_cfg.get("gate", "paper"), seed=self.seed * 100 + r,
                              opts=self.pso_cfg.get("opts"), log=lambda m: print(m, flush=True))
-        self.model.train()
         self.adv_params = new
         self._make_advisors()
         self.state["pso_rounds"] = r + 1

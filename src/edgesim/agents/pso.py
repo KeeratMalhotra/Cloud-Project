@@ -21,9 +21,25 @@ SPACE = {  # name: (low, high)
     "lambda_l": (0.0, 0.5),
     "rho_set": (0.5, 0.95),
 }
-# 300 s stress episodes: shorter ones never build the queues that make the advisory gains matter.
-PSO_DEFAULTS = {"particles": 5, "iters": 2, "w_max": 0.9, "w_min": 0.4, "c1": 2.05, "c2": 2.05,
-                "episode_s": 300.0, "regime": 150_000, "episodes": 1, "min_gain": 0.002}
+# 200 s stress episodes (shorter ones never build the queues that make the advisory gains matter); the
+# particles of one iteration are scored in parallel worker processes.
+PSO_DEFAULTS = {"particles": 4, "iters": 2, "w_max": 0.9, "w_min": 0.4, "c1": 2.05, "c2": 2.05,
+                "episode_s": 200.0, "regime": 150_000, "episodes": 1, "min_gain": 0.002, "workers": 4}
+
+
+def _score_worker(job: tuple) -> dict:
+    """Score one advisory setting with the frozen policy saved at `model_path` (runs in a worker process)."""
+    import torch
+
+    from edgesim.agents.ccppo import CCPPOAgent, load_agent
+    from edgesim.sim.world import load_world
+
+    model_path, dataset, cfg, params, seeds, regime, episode_s = job
+    torch.set_num_threads(1)
+    world = load_world(dataset)
+    base = load_agent(model_path, world)
+    make = lambda p: CCPPOAgent(base.model, p, world.n_sites, world.n_servers)  # noqa: E731
+    return evaluate_setting(make, world, cfg, dataset, params, seeds, regime, episode_s)
 
 
 def constriction(c1: float, c2: float) -> float:
@@ -56,9 +72,14 @@ def passes(gate: str, cand: dict, cur: dict, min_gain: float) -> bool:
     raise ValueError(f"unknown gate {gate!r}")
 
 
-def pso_round(make_agent, world, cfg: dict, dataset: str, current: dict, gate: str, seed: int,
+def pso_round(model_path, cfg: dict, dataset: str, current: dict, gate: str, seed: int,
               opts: dict | None = None, log=print) -> tuple[dict, dict]:
-    """One PSO search around `current`. Returns (accepted params, record of the search)."""
+    """One PSO search around `current` for the policy checkpoint in `model_path`.
+
+    Returns (accepted params, record of the search).
+    """
+    from concurrent.futures import ProcessPoolExecutor
+
     o = {**PSO_DEFAULTS, **(opts or {})}
     rng = np.random.default_rng([seed, 17])
     names = list(SPACE)
@@ -66,27 +87,33 @@ def pso_round(make_agent, world, cfg: dict, dataset: str, current: dict, gate: s
     hi = np.array([SPACE[k][1] for k in names])
     k = constriction(o["c1"], o["c2"])
     seeds = [int(x) for x in rng.integers(1_000_000, size=o["episodes"])]
-    score = lambda th: evaluate_setting(make_agent, world, cfg, dataset, {**current, **dict(zip(names, th))},  # noqa: E731
-                                        seeds, o["regime"], o["episode_s"])
+    pool = ProcessPoolExecutor(max_workers=o["workers"])
+
+    def score_all(thetas) -> list[dict]:
+        jobs = [(model_path, dataset, cfg, {**current, **dict(zip(names, th.tolist()))}, seeds, o["regime"],
+                 o["episode_s"]) for th in thetas]
+        return list(pool.map(_score_worker, jobs))
+
     x0 = np.array([current.get(nm, (SPACE[nm][0] + SPACE[nm][1]) / 2) for nm in names], dtype=np.float64)
-    base = score(x0)
     pos = np.vstack([x0, lo + rng.random((o["particles"] - 1, len(names))) * (hi - lo)])
     vel = (rng.random(pos.shape) - 0.5) * (hi - lo) * 0.2
-    fit = [base] + [score(p) for p in pos[1:]]
+    fit = score_all(pos)
+    base = fit[0]
     pbest, pbest_fit = pos.copy(), list(fit)
     g = int(np.argmax([f["success"] for f in fit]))
+    log(f"PSO init: best success {pbest_fit[g]['success']:.4f} (baseline {base['success']:.4f})")
     for it in range(o["iters"]):
         w = o["w_max"] - (o["w_max"] - o["w_min"]) * it / max(o["iters"], 1)  # Eq. 13a
         r1, r2 = rng.random(pos.shape), rng.random(pos.shape)
         vel = k * w * vel + k * o["c1"] * r1 * (pbest - pos) + k * o["c2"] * r2 * (pbest[g] - pos)  # Eq. 13b
         pos = np.clip(pos + vel, lo, hi)  # Eq. 13c
-        for j in range(len(pos)):
-            f = score(pos[j])
+        for j, f in enumerate(score_all(pos)):
             if f["success"] > pbest_fit[j]["success"]:
                 pbest[j], pbest_fit[j] = pos[j].copy(), f
         g = int(np.argmax([f["success"] for f in pbest_fit]))
         log(f"PSO iter {it + 1}/{o['iters']}: best success {pbest_fit[g]['success']:.4f} "
             f"(baseline {base['success']:.4f})")
+    pool.shutdown()
     best = dict(zip(names, pbest[g].tolist()))
     ok = passes(gate, pbest_fit[g], base, o["min_gain"])
     record = {"baseline": base, "best": pbest_fit[g], "best_params": best, "accepted": bool(ok), "gate": gate,
