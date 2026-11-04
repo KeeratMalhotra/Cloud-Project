@@ -1,0 +1,22 @@
+# Dataset A: CityPulse pollution stream (Aarhus, generated random walk). The data EdgePlus used.
+name: citypulse
+pollutants: [ozone, particulate_matter, carbon_monoxide, sulfur_dioxide, nitrogen_dioxide]
+valid_range: [0, 500]            # index values outside this range are dropped
+bbox: null                       # keep every site
+
+# Inclusive day ranges (local time).
+splits:
+  train: ["2014-08-01", "2014-09-09"]
+  val:   ["2014-09-10", "2014-09-19"]
+  test:  ["2014-09-20", "2014-10-01"]
+
+# EdgePlus places the city in a 10 km x 10 km square.
+geometry:
+  mode: square
+  side_km: 10.0
+
+rise_lag_s: 300                  # one reading step
+batch_jitter_s: 300              # all sites report at the same instant; spread readings inside each 5-min interval
+episode_window_days: 2           # one day holds 129k readings, so 150k-task episodes need two
+topology_points: sites           # cluster the 449 fixed sites
+cell_m: null

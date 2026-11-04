@@ -1,0 +1,12 @@
+# Sites and server inventory (same on every dataset so that only the data changes).
+# Server speeds and sizes are placeholders, calibrated in milestone M2.
+n_clusters: 10
+kmeans:
+  seed: 39                       # EdgePlus seed for clusterer initialization
+  n_init: 10
+  max_iter: 300
+
+servers:
+  stationary: {per_cluster: 1, cpu_ghz: 20.0, mem_gb: 64}
+  mobile: {per_cluster: 2, cpu_ghz: 10.0, mem_gb: 32, speed_kmh: 120, battery_kwh: 2.0, offset_km: 0.3}
+  cloud: {count: 2, cpu_ghz: 100.0, mem_gb: 512}

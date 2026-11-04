@@ -1,0 +1,38 @@
+# How readings become tasks (EdgePlus Algorithm 3 made concrete; see docs/CHORUS_Design.md, section 8.3).
+horizon_s: 600                   # arrivals of one episode span 600 s of simulated time (implied by EdgePlus Fig. 5)
+
+# fixed:   rank tasks by severity inside each episode so the class mix is exactly target_shares
+#          (EdgePlus Table IV keeps per-episode shares fixed, so load is the only varying factor)
+# natural: keep the training-day thresholds, so the mix follows the day's pollution (a stress variant)
+slice_mode: fixed
+target_shares: [0.20, 0.50, 0.30]  # URLLC, eMBB, mMTC
+regimes:
+  light: 50000
+  medium: 100000
+  stress: 150000
+window_oversample: 1.2           # an episode window must hold at least 1.2 x N readings
+
+labels:
+  winsor_quantile: 0.995
+  rise_quantile: 0.95            # rise above this training-day quantile sets the rise flag
+  rise_weight: 1.0               # severity = max robust z + rise_weight * rise_flag
+  tier_quantiles: [0.30, 0.80]   # below q30 -> mMTC, q30..q80 -> eMBB, above q80 -> URLLC (EdgePlus Table IV shares)
+  priority:                      # hysteresis thresholds as training-day severity quantiles
+    high_enter: 0.90
+    high_exit: 0.85
+    mod_enter: 0.50
+    mod_exit: 0.45
+
+slices: [URLLC, eMBB, mMTC]
+deadline_s:                      # EdgePlus Sec. IV-B2
+  URLLC: [5, 15]
+  eMBB: [30, 120]
+  mMTC: [120, 600]
+
+# Per-class footprints as lognormal (median, sigma). EdgePlus gives no values; these are our
+# starting assumptions and are calibrated in milestone M2.
+footprint:
+  URLLC: {payload_kb: [50, 0.5], cycles_g: [0.5, 0.4], mem_mb: [64, 0.2]}
+  eMBB: {payload_kb: [2000, 0.5], cycles_g: [2.0, 0.4], mem_mb: [256, 0.2]}
+  mMTC: {payload_kb: [10, 0.5], cycles_g: [0.2, 0.4], mem_mb: [32, 0.2]}
+  severity_scale: 0.05           # payload and cycles grow by (1 + 0.05 * max(severity, 0))

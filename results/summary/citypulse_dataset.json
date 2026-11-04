@@ -1,0 +1,416 @@
+{
+  "dataset": "citypulse",
+  "display_name": "CityPulse (Aarhus, generated)",
+  "clean": {
+    "rows_in": 7887974,
+    "dropped_missing": 0,
+    "dropped_range_or_area": 0,
+    "dropped_duplicates": 0,
+    "rows_out": 7887974
+  },
+  "rows_outside_splits": 0,
+  "sensors": 449,
+  "time_range": [
+    "2014-08-01 00:05:00",
+    "2014-10-01 00:00:00"
+  ],
+  "extent_km": [
+    10.0,
+    10.0
+  ],
+  "area_km2": 100.0,
+  "pollutants": [
+    "ozone",
+    "particulate_matter",
+    "carbon_monoxide",
+    "sulfur_dioxide",
+    "nitrogen_dioxide"
+  ],
+  "label_params": {
+    "pollutants": [
+      "ozone",
+      "particulate_matter",
+      "carbon_monoxide",
+      "sulfur_dioxide",
+      "nitrogen_dioxide"
+    ],
+    "winsor_hi": {
+      "ozone": 210.0,
+      "particulate_matter": 210.0,
+      "carbon_monoxide": 210.0,
+      "sulfur_dioxide": 210.0,
+      "nitrogen_dioxide": 210.0
+    },
+    "median": {
+      "ozone": 109.0,
+      "particulate_matter": 109.0,
+      "carbon_monoxide": 108.0,
+      "sulfur_dioxide": 109.0,
+      "nitrogen_dioxide": 108.0
+    },
+    "scale": {
+      "ozone": 68.19959999999999,
+      "particulate_matter": 69.6822,
+      "carbon_monoxide": 69.6822,
+      "sulfur_dioxide": 69.6822,
+      "nitrogen_dioxide": 69.6822
+    },
+    "rise_lag_s": 300.0,
+    "rise_weight": 1.0,
+    "rise_thr": 0.07331421226263046,
+    "tier_thr": [
+      0.8179994225502014,
+      1.348981499671936
+    ],
+    "prio_thr": {
+      "high_enter": 1.4305260181427002,
+      "high_exit": 1.3920341730117798,
+      "mod_enter": 1.085050344467163,
+      "mod_exit": 1.02639901638031
+    }
+  },
+  "splits": {
+    "train": {
+      "rows": 5172031,
+      "days": 40,
+      "rows_per_day": {
+        "min": 128863,
+        "median": 129312.0,
+        "max": 129312
+      },
+      "sensors": 449,
+      "slice_shares": [
+        0.2097,
+        0.4934,
+        0.2969
+      ],
+      "prio_shares": [
+        0.1228,
+        0.4065,
+        0.4707
+      ]
+    },
+    "val": {
+      "rows": 1293120,
+      "days": 10,
+      "rows_per_day": {
+        "min": 129312,
+        "median": 129312.0,
+        "max": 129312
+      },
+      "sensors": 449,
+      "slice_shares": [
+        0.2309,
+        0.5214,
+        0.2478
+      ],
+      "prio_shares": [
+        0.1344,
+        0.4412,
+        0.4243
+      ]
+    },
+    "test": {
+      "rows": 1422823,
+      "days": 12,
+      "rows_per_day": {
+        "min": 448,
+        "median": 129312.0,
+        "max": 129312
+      },
+      "sensors": 449,
+      "slice_shares": [
+        0.2322,
+        0.5247,
+        0.2431
+      ],
+      "prio_shares": [
+        0.1356,
+        0.4416,
+        0.4228
+      ]
+    }
+  },
+  "topology": {
+    "n_sites": 10,
+    "neighbors": [
+      [
+        1,
+        2,
+        3
+      ],
+      [
+        0,
+        2,
+        3,
+        4
+      ],
+      [
+        0,
+        1,
+        4,
+        5,
+        9
+      ],
+      [
+        0,
+        1,
+        4,
+        7
+      ],
+      [
+        1,
+        2,
+        3,
+        5,
+        6,
+        7
+      ],
+      [
+        2,
+        4,
+        6,
+        8,
+        9
+      ],
+      [
+        4,
+        5,
+        7,
+        8
+      ],
+      [
+        3,
+        4,
+        6,
+        8,
+        9
+      ],
+      [
+        5,
+        6,
+        7,
+        9
+      ],
+      [
+        2,
+        5,
+        7,
+        8
+      ]
+    ],
+    "mean_degree": 4.4,
+    "centers_km": [
+      [
+        0.574,
+        5.785
+      ],
+      [
+        2.044,
+        6.881
+      ],
+      [
+        2.775,
+        8.699
+      ],
+      [
+        3.618,
+        4.746
+      ],
+      [
+        3.639,
+        6.431
+      ],
+      [
+        4.55,
+        8.123
+      ],
+      [
+        5.327,
+        6.821
+      ],
+      [
+        5.391,
+        5.356
+      ],
+      [
+        6.613,
+        7.621
+      ],
+      [
+        8.345,
+        8.517
+      ]
+    ],
+    "points": 449,
+    "servers": {
+      "mobile": 20,
+      "stationary": 10,
+      "cloud": 2
+    }
+  },
+  "episodes": {
+    "light": {
+      "split": "test",
+      "seed": 0,
+      "n_tasks": 50000,
+      "window_start": "2014-09-25 00:00:00",
+      "window_end": "2014-09-27 00:00:00",
+      "window_days": 2,
+      "slice_mode": "fixed",
+      "natural_slice_shares": [
+        0.2227,
+        0.5139,
+        0.2634
+      ],
+      "arrivals_1s": {
+        "mean_per_s": 83.33333333333333,
+        "cv": 0.10076824896761875,
+        "peak_to_mean": 1.3920000000000001,
+        "p99_per_s": 102.0
+      },
+      "arrivals_10s": {
+        "mean_per_s": 83.33333333333333,
+        "cv": 0.030483831780142086,
+        "peak_to_mean": 1.0608000000000002,
+        "p99_per_s": 87.928
+      },
+      "slice_shares": [
+        0.2,
+        0.5,
+        0.3
+      ],
+      "rel_deadline_s_by_slice": [
+        9.969206716876977,
+        75.06180386957801,
+        358.4941399433124
+      ],
+      "cycles_g_mean": 1.3280275267393542,
+      "payload_mb_mean": 1.2127903844838428,
+      "site_shares": [
+        0.035,
+        0.0757,
+        0.0465,
+        0.1079,
+        0.1178,
+        0.0356,
+        0.2097,
+        0.2063,
+        0.0981,
+        0.0675
+      ],
+      "busiest_site_over_mean": 2.097,
+      "mean_rel_deadline_s": 147.07298526115812
+    },
+    "medium": {
+      "split": "test",
+      "seed": 0,
+      "n_tasks": 100000,
+      "window_start": "2014-09-25 00:00:00",
+      "window_end": "2014-09-27 00:00:00",
+      "window_days": 2,
+      "slice_mode": "fixed",
+      "natural_slice_shares": [
+        0.224,
+        0.5148,
+        0.2611
+      ],
+      "arrivals_1s": {
+        "mean_per_s": 166.66666666666666,
+        "cv": 0.06874707266495061,
+        "peak_to_mean": 1.224,
+        "p99_per_s": 195.01999999999998
+      },
+      "arrivals_10s": {
+        "mean_per_s": 166.66666666666666,
+        "cv": 0.01832266356182966,
+        "peak_to_mean": 1.0536,
+        "p99_per_s": 174.538
+      },
+      "slice_shares": [
+        0.2,
+        0.5,
+        0.3
+      ],
+      "rel_deadline_s_by_slice": [
+        9.995946080900689,
+        74.92297928986102,
+        358.95906007699006
+      ],
+      "cycles_g_mean": 1.3292790550850784,
+      "payload_mb_mean": 1.2159645628247142,
+      "site_shares": [
+        0.0361,
+        0.0755,
+        0.0464,
+        0.109,
+        0.119,
+        0.0354,
+        0.2089,
+        0.2054,
+        0.0979,
+        0.0663
+      ],
+      "busiest_site_over_mean": 2.0887000000000002,
+      "mean_rel_deadline_s": 147.14839688420764
+    },
+    "stress": {
+      "split": "test",
+      "seed": 0,
+      "n_tasks": 150000,
+      "window_start": "2014-09-25 00:00:00",
+      "window_end": "2014-09-27 00:00:00",
+      "window_days": 2,
+      "slice_mode": "fixed",
+      "natural_slice_shares": [
+        0.2245,
+        0.5144,
+        0.2611
+      ],
+      "arrivals_1s": {
+        "mean_per_s": 250.0,
+        "cv": 0.04784084726117072,
+        "peak_to_mean": 1.156,
+        "p99_per_s": 279.0
+      },
+      "arrivals_10s": {
+        "mean_per_s": 250.0,
+        "cv": 0.011559238729258953,
+        "peak_to_mean": 1.0284,
+        "p99_per_s": 257.1
+      },
+      "slice_shares": [
+        0.2,
+        0.5,
+        0.3
+      ],
+      "rel_deadline_s_by_slice": [
+        9.994349271584484,
+        74.87901149063644,
+        360.0011264569151
+      ],
+      "cycles_g_mean": 1.3267103553213762,
+      "payload_mb_mean": 1.2161253640540743,
+      "site_shares": [
+        0.0358,
+        0.0761,
+        0.0464,
+        0.1087,
+        0.1184,
+        0.0355,
+        0.2093,
+        0.2053,
+        0.0982,
+        0.0662
+      ],
+      "busiest_site_over_mean": 2.0932666666666666,
+      "mean_rel_deadline_s": 147.43871353670966
+    }
+  },
+  "slices": [
+    "URLLC",
+    "eMBB",
+    "mMTC"
+  ],
+  "runtime_s": 12.1
+}

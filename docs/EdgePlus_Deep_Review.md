@@ -30,7 +30,7 @@ Numbers marked ≈ were read off a plot. Everything else is printed in the paper
 7. [Improvements](#7-improvements)
 8. [Novelty candidates](#8-novelty-candidates)
 9. [Roadmap](#9-roadmap)
-10. [Decisions needed from the team](#10-decisions-needed-from-the-team)
+10. [Decisions (resolved 4 Nov 2026)](#10-decisions-resolved-4-nov-2026)
 11. [Sources](#11-sources)
 
 ---
@@ -468,47 +468,26 @@ One permutation-invariant policy over the Delaunay cluster graph, shared by all 
 
 **Recommendation.** N1 as the main contribution, I-1 to I-4 as the improvements chapter, and N2 if time allows.
 
+**Decision (4 Nov 2026).** The team chose a broader direction: our own multi-agent RL framework, CHORUS, specified in [`CHORUS_Design.md`](./CHORUS_Design.md). N1 becomes one of its modules (calibrated masks). I-1 to I-4 remain the improvements part of the paper.
+
 ---
 
 ## 9. Roadmap
 
-| Phase | Work | Exit criterion |
-|---|---|---|
-| 1. Simulator and data | CityPulse loader, Algorithm 3 labeling, topology (weighted K-means, Delaunay), environment with explicit queues and the Kingman predictor, masks, KPI evaluator, heuristic baselines, load calibration | heuristics give about 100% success at 50k and clear overload at 150k |
-| 2. Base reproduction | CCPPO (per-cluster actors, centralized critic), advisory, ledger with real SHA3-256/BLAKE2b/Ed25519, PSO, the four learned baselines and `ccppo_lagr`, ablations A1–A6, OBJ1–OBJ5 figures, OBJ6 script, crypto timing benchmarks for OBJ7 | qualitative match (100% at 50k, degradation at 150k, ablation ordering) and a written list of where we differ |
-| 3. Improvements | I-1 to I-4, then I-5 to I-9 as time allows | each change measured against the reproduction |
-| 4. Novelty | N1 (and N2 if time allows): coverage, success, URLLC reliability, heavy tails, load shifts, ablations of the conformal parts | results with CIs over 20+ seeds |
-| 5. Paper | reproduction, issues, improvements, novelty, in the target venue's template | draft ready for review |
+The build plan now lives in [`CHORUS_Design.md`, Section 12](./CHORUS_Design.md#12-build-plan): milestones M1 (data and topology) to M7 (paper). The EdgePlus reproduction is milestone M3, and the improvements I-1 to I-4 are folded into the evaluation protocol there.
 
-Compute: the sandbox has 8 vCPUs, 30 GB RAM, and no GPU. Small MLP policies, a vectorized NumPy simulator, and background runs fit that budget. A GPU is not required.
-
-Proposed code layout:
-
-```
-edgeplus/
-  data/        CityPulse download, cleaning, Algorithm 3 task builder
-  sim/         topology, servers, radio and queue models, slices, environment API
-  masks.py     feasibility masks (conformal masks added in phase 4)
-  advisory/    nash.py, pid.py, leader.py
-  ledger/      hash chain, PoA validation, reputation and debt
-  agents/      ccppo, ensemble_ppo, fd3qn, ddpg, sac, ccppo_lagr, heuristics
-  pso.py
-  eval/        KPIs, statistics, plots
-configs/       one YAML file per experiment
-scripts/       train, evaluate, figures, OBJ6 PID study, crypto benchmarks
-results/       summarized CSVs (raw logs ignored by git)
-paper/         LaTeX source
-```
+Compute: we benchmarked the sandbox (AMD EPYC, 4 physical cores with 8 threads, 30 GB RAM, no GPU). A simulator loop handles about 8,900 decisions per second per core; with a small policy network it handles about 1,250 per second one task at a time, or about 6,000 per second when 16 simulations run side by side. A PPO update on 8,192 decisions takes 3.7 s. One 3M-decision training run takes about 30 minutes on one core, and all final runs need about 25 to 35 core-hours. A GPU is not required.
 
 ---
 
-## 10. Decisions needed from the team
+## 10. Decisions (resolved 4 Nov 2026)
 
-1. **Timeline and target.** Course report, conference, or journal? Page limit and template?
-2. **Novelty.** Go with N1 (recommended), or prefer another candidate?
-3. **Reproduction scope.** Is it fine to simplify CBS–D* Lite to grid A* (or straight-line driving), skip BFT, DKMS, and attack injection, and report real crypto timings instead of "defense %"?
-4. **Ground-truth queues.** Explicit simulated queues with the Kingman formula as the mask's predictor (recommended), or the paper's formula as ground truth?
-5. **Compute.** Is this sandbox enough, or will someone run longer jobs on another machine?
+1. **Timeline and length.** No fixed deadline. The paper should be 15 to 25 pages.
+2. **Contribution.** Our own MARL framework, CHORUS ([`CHORUS_Design.md`](./CHORUS_Design.md)), compared head-to-head with EdgePlus on the same data, then tested on a second dataset. Calibrated masks (N1) are one of its modules.
+3. **Reproduction scope.** Mobile routing simplified to grid A* or straight-line driving. No BFT, DKMS, or attack injection. OBJ7 reports measured cryptographic timings instead of "defense %".
+4. **Ground-truth queues.** Explicitly simulated queues; the Kingman formula is used only as the mask's predictor.
+5. **Compute.** The sandbox is enough (Section 9).
+6. **Second dataset.** AirDelhi, New Delhi ([`CHORUS_Design.md`, Section 8.2](./CHORUS_Design.md#82-dataset-b-airdelhi-new-delhi-the-unseen-test)).
 
 ---
 
