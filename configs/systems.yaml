@@ -1,0 +1,26 @@
+# System presets: overrides applied on top of configs/sim.yaml (docs/CHORUS_Design.md, Section 9).
+# They change system features only; the scheduling policy is chosen separately.
+
+edgeplus:                        # as described in the EdgePlus paper
+  queue: {discipline: fifo, predictor: backlog}
+  mask: {infeasible: best_effort, calibrated: false}
+  dispatch: {allow_reject: false}
+  mobility: {mode: distress}
+
+edgeplus_literal:                # EdgePlus with its Kingman queue surrogate in the mask (Eq. 31)
+  queue: {discipline: fifo, predictor: kingman}
+  mask: {infeasible: best_effort, calibrated: false}
+  dispatch: {allow_reject: false}
+  mobility: {mode: distress}
+
+edgeplus_plus:                   # EdgePlus plus the CHORUS features that need no learning
+  queue: {discipline: slice_priority, predictor: backlog}
+  mask: {infeasible: reject, calibrated: false}
+  dispatch: {allow_reject: false}
+  mobility: {mode: distress}
+
+chorus:                          # slow decisions become external once the orchestrators exist (milestone M5)
+  queue: {discipline: slice_priority, predictor: backlog}
+  mask: {infeasible: reject, calibrated: true}
+  dispatch: {allow_reject: true}
+  mobility: {mode: distress}

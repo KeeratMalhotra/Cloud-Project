@@ -16,10 +16,19 @@ from edgesim.data.labeling import SLICES
 DAY_NS = 86_400 * 10**9
 
 
-def _windows(day_ns: np.ndarray, counts: np.ndarray, min_days: int, need: int) -> list[tuple[int, int]]:
-    """Candidate windows (i, j) over consecutive calendar days with at least `need` readings."""
+WINDOW_ORDER_SEED = 20261104  # fixed: seed k uses the k-th window of one fixed shuffle of all windows
+
+
+def _windows(day_ns: np.ndarray, counts: np.ndarray, min_days: int, need: int,
+             min_day_fraction: float = 0.5) -> list[tuple[int, int]]:
+    """Candidate windows (i, j) over consecutive calendar days with at least `need` readings in total.
+
+    Every day in a window must hold at least `min_day_fraction` of the median daily count. Otherwise a nearly
+    empty day (e.g. the last day of a dataset) would squeeze all sampled tasks into part of the horizon.
+    """
     out = []
     n = len(day_ns)
+    full = counts >= min_day_fraction * np.median(counts)
     for i in range(n):
         j = min(i + min_days, n)
         total = int(counts[i:j].sum())
@@ -27,7 +36,7 @@ def _windows(day_ns: np.ndarray, counts: np.ndarray, min_days: int, need: int) -
             total += int(counts[j])
             j += 1
         contiguous = (day_ns[j - 1] - day_ns[i]) == (j - 1 - i) * DAY_NS
-        if total >= need and contiguous and (j - i) >= min_days:
+        if total >= need and contiguous and (j - i) >= min_days and full[i:j].all():
             out.append((i, j))
     return out
 
@@ -43,10 +52,12 @@ def build_episode(split_readings: pd.DataFrame, n_tasks: int, seed: int, ds_cfg:
     day = ts_ns - (ts_ns % DAY_NS)
     day_ns, counts = np.unique(day, return_counts=True)
     need = math.ceil(wl_cfg["window_oversample"] * n_tasks)
-    wins = _windows(day_ns, counts, int(ds_cfg["episode_window_days"]), need)
+    wins = _windows(day_ns, counts, int(ds_cfg["episode_window_days"]), need,
+                    float(wl_cfg.get("min_day_fraction", 0.5)))
     if not wins:
         raise ValueError(f"no window of consecutive days holds {need} readings")
-    i, j = wins[rng.integers(len(wins))]
+    order = np.random.default_rng(WINDOW_ORDER_SEED).permutation(len(wins))
+    i, j = wins[order[seed % len(wins)]]
     w0, w1 = int(day_ns[i]), int(day_ns[j - 1]) + DAY_NS
     idx = np.flatnonzero((ts_ns >= w0) & (ts_ns < w1))
     pick = np.sort(rng.choice(idx, size=n_tasks, replace=False))

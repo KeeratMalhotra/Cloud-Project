@@ -122,23 +122,40 @@ def nearest_site(x: np.ndarray, y: np.ndarray, centers: np.ndarray, chunk: int =
     return out
 
 
-def build_servers(centers: np.ndarray, cfg: dict) -> pd.DataFrame:
-    """Server inventory: per site `stationary.per_cluster` stationary and `mobile.per_cluster` mobile, plus cloud."""
+def stationary_cores(n_sites: int, cfg: dict, site_shares: np.ndarray | None) -> np.ndarray:
+    """Cores of each site's stationary server: equal, or proportional to the training-day task share."""
+    base = int(cfg["servers"]["stationary"]["cores"])
+    prov = cfg.get("provisioning", {})
+    if prov.get("stationary", "equal") != "proportional" or site_shares is None:
+        return np.full(n_sites, base, dtype=np.int64)
+    w = np.maximum(np.asarray(site_shares, np.float64), prov.get("floor_share", 0.3) / n_sites)
+    w = w / w.sum()
+    return np.maximum(int(prov.get("min_cores", 2)), np.round(base * n_sites * w)).astype(np.int64)
+
+
+def build_servers(centers: np.ndarray, cfg: dict, site_shares: np.ndarray | None = None) -> pd.DataFrame:
+    """Server inventory: per site one stationary and `mobile.per_cluster` mobile servers, plus cloud servers.
+
+    Columns: server_id, kind, site, x_km, y_km, cores, ghz_per_core, mem_gb, speed_mps, battery_kwh.
+    Cloud servers have site -1 and no position.
+    """
     st, mo, cl = cfg["servers"]["stationary"], cfg["servers"]["mobile"], cfg["servers"]["cloud"]
+    st_cores = stationary_cores(len(centers), cfg, site_shares)
     rows = []
     for c, (cx, cy) in enumerate(centers):
         for _ in range(st["per_cluster"]):
-            rows.append(dict(kind="stationary", site=c, home_site=c, x_km=cx, y_km=cy, cpu_ghz=st["cpu_ghz"],
-                             mem_gb=st["mem_gb"], speed_mps=0.0, battery_kwh=np.nan))
+            rows.append(dict(kind="stationary", site=c, x_km=cx, y_km=cy, cores=int(st_cores[c]),
+                             ghz_per_core=st["ghz_per_core"], mem_gb=st["mem_gb"], speed_mps=0.0, battery_kwh=np.nan))
         n_m = mo["per_cluster"]
         for j in range(n_m):
             ang = 2 * np.pi * j / max(n_m, 1)
-            rows.append(dict(kind="mobile", site=c, home_site=c, x_km=cx + mo["offset_km"] * np.cos(ang),
-                             y_km=cy + mo["offset_km"] * np.sin(ang), cpu_ghz=mo["cpu_ghz"], mem_gb=mo["mem_gb"],
-                             speed_mps=mo["speed_kmh"] / 3.6, battery_kwh=mo["battery_kwh"]))
+            rows.append(dict(kind="mobile", site=c, x_km=cx + mo["offset_km"] * np.cos(ang),
+                             y_km=cy + mo["offset_km"] * np.sin(ang), cores=int(mo["cores"]),
+                             ghz_per_core=mo["ghz_per_core"], mem_gb=mo["mem_gb"], speed_mps=mo["speed_kmh"] / 3.6,
+                             battery_kwh=mo["battery_kwh"]))
     for _ in range(cl["count"]):
-        rows.append(dict(kind="cloud", site=-1, home_site=-1, x_km=np.nan, y_km=np.nan, cpu_ghz=cl["cpu_ghz"],
-                         mem_gb=cl["mem_gb"], speed_mps=0.0, battery_kwh=np.nan))
+        rows.append(dict(kind="cloud", site=-1, x_km=np.nan, y_km=np.nan, cores=int(cl["cores"]),
+                         ghz_per_core=cl["ghz_per_core"], mem_gb=cl["mem_gb"], speed_mps=0.0, battery_kwh=np.nan))
     df = pd.DataFrame(rows)
     df.insert(0, "server_id", np.arange(len(df)))
     return df
