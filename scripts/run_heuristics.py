@@ -25,6 +25,8 @@ KPIS = ["success", "violations", "success_URLLC", "success_eMBB", "success_mMTC"
         "lat_p99", "throughput", "cloud_share", "locality", "stationary_share", "energy_it_j", "km_driven",
         "rejected", "mask_empty", "best_effort", "relocations", "jain_site_success", "pred_err_p95_s",
         "decisions", "wall_s", "policy_us_per_decision"]
+KPIS_OPT = ["drive_energy_j", "energy_total_j", "energy_per_task_j", "dvfs_slowed", "ledger_commit_p50_s",
+            "ledger_commit_p95_s", "ledger_final_p50_s", "ledger_final_p95_s", "ledger_cpu_share"]
 
 
 def main() -> None:
@@ -37,6 +39,7 @@ def main() -> None:
     ap.add_argument("--regimes", nargs="+", default=None, help="subset of light / medium / stress")
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--fresh", action="store_true", help="discard episodes saved by earlier runs")
+    ap.add_argument("--tag", default="", help="suffix for the output files, e.g. _pec")
     args = ap.parse_args()
     regimes = workload_config()["regimes"]
     names = args.regimes or list(regimes)
@@ -47,7 +50,7 @@ def main() -> None:
     df["regime"] = df["n_tasks"].map({v: k for k, v in regimes.items()})
     raw_dir = ROOT / "results" / "raw"
     raw_dir.mkdir(parents=True, exist_ok=True)
-    raw_path = raw_dir / f"heuristics_{args.dataset}_{args.split}.csv"
+    raw_path = raw_dir / f"heuristics_{args.dataset}_{args.split}{args.tag}.csv"
     if raw_path.exists() and not args.fresh:  # merge with earlier chunks; new episodes replace old ones
         old = pd.read_csv(raw_path)
         key = ["system", "policy", "n_tasks", "seed"]
@@ -59,13 +62,14 @@ def main() -> None:
     rows = []
     for (sy, p, r), g in df.groupby(["system", "policy", "regime"], sort=False):
         row = {"system": sy, "policy": p, "regime": r, "episodes": int(len(g))}
-        for k in KPIS:
+        for k in KPIS + [c for c in KPIS_OPT if c in g.columns and g[c].notna().all()]:
             v = g[k].astype(float)
             row[k] = round(float(v.mean()), 5)
             row[f"{k}_ci95"] = round(float(1.96 * v.std(ddof=1) / math.sqrt(len(v))), 5) if len(v) > 1 else None
         rows.append(row)
     out = {"dataset": args.dataset, "split": args.split, "seeds": args.seeds, "rows": rows}
-    (ROOT / "results" / "summary" / f"heuristics_{args.dataset}_{args.split}.json").write_text(json.dumps(out, indent=2))
+    (ROOT / "results" / "summary" / f"heuristics_{args.dataset}_{args.split}{args.tag}.json").write_text(
+        json.dumps(out, indent=2))
     show = pd.DataFrame(rows)[["system", "policy", "regime", "success", "success_ci95", "success_URLLC",
                                "lat_p50", "lat_p95", "cloud_share", "locality", "rejected", "km_driven"]]
     order = {r: n for n, r in enumerate(names)}
