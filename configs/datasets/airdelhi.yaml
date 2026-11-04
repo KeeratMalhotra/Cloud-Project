@@ -1,0 +1,22 @@
+# Dataset B: AirDelhi bus-mounted PM sensors (New Delhi, real data, CC BY 4.0). The unseen test.
+name: airdelhi
+pollutants: [pm1_0, pm2_5, pm10]
+valid_range: [1, 2000]           # ug/m3; the sensors saturate near 2000
+bbox:                            # Delhi-NCR study area (the portal reports lat 28.49-28.72, lon 77.10-77.32)
+  lat: [28.40, 28.80]
+  lon: [77.00, 77.40]
+
+# Inclusive day ranges (local time, IST).
+splits:
+  train: ["2020-11-01", "2020-12-24"]
+  val:   ["2020-12-25", "2020-12-31"]
+  test:  ["2021-01-01", "2021-01-30"]
+
+geometry:
+  mode: true_scale               # keep the real city geometry
+
+rise_lag_s: 60                   # rise flag compares with the same bus one minute earlier
+batch_jitter_s: 0                # timestamps are already spread out
+episode_window_days: 1
+topology_points: cells           # buses move, so cluster 100 m grid cells instead of fixed sites
+cell_m: 100

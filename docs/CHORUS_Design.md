@@ -2,7 +2,7 @@
 
 **CHORUS** (working name): Coordinated Hierarchical Orchestration with Reliability-aware, Uncertainty-calibrated Scheduling. It is our multi-agent RL framework for task allocation in 6G edge-cloud systems, designed to fix the limitations we found in EdgePlus.
 
-- Status: direction agreed on 4 Nov 2026. Implementation has started (milestone M1, Section 12).
+- Status: direction agreed on 4 Nov 2026. Milestone M1 (data and topology) is done; next is M2, the simulator core (Section 12).
 - References like "deep review 5.4.2" point to [`EdgePlus_Deep_Review.md`](./EdgePlus_Deep_Review.md) (section 5.4, item 2).
 - Paper target: 15 to 25 pages.
 
@@ -172,6 +172,7 @@ r_i = w_k (1[on time] − 1[missed]) − λ_k · 1[missed] − β_L · L̃_i −
 ### 8.2 Dataset B: AirDelhi (New Delhi, the unseen test)
 
 - **Source.** Chauhan, Ranu, Sen, Patel, Batra, "AirDelhi: Fine-Grained Spatio-Temporal Particulate Matter Dataset From Delhi For ML based Modeling", NeurIPS 2023 Datasets and Benchmarks Track. Portal: <http://www.cse.iitd.ac.in/pollutiondata>, which links to a public Google Drive folder of 91 daily CSV files (1 Nov 2020 to 30 Jan 2021). License: CC BY 4.0.
+- **Our copy.** Google Drive throttles bulk downloads, so both datasets are mirrored as checksum-verified Parquet files on this repository's `data-mirror` branch (same rows and values; both licenses allow redistribution with attribution). `scripts/download_data.py` fetches from there by default.
 - **Content.** PM1, PM2.5, and PM10 from low-cost sensors with GPS and 4G, mounted on 13 public DIMTS buses. About 12.5M readings over about 559 km² (latitude 28.49–28.72, longitude 77.10–77.32).
 - **What we checked** on three sample days (15 Nov, 15 Dec, 12 Jan):
   - 178k to 214k readings per day from 9 to 12 active buses, one reading per bus every 3 s (median);
@@ -189,19 +190,39 @@ This makes EdgePlus Algorithm 3 concrete.
 
 1. **Clean.** Drop duplicates, sort by time per sensor, drop non-physical values, winsorize each pollutant at p99.5 (limits from training days).
 2. **Severity.** Robust z-score per pollutant (median and MAD from training days), plus a rise flag from the change over Δt (5 min for A, 1 min for B). Severity = max z + 1.0 × rise flag.
-3. **Tier.** Thresholds at the 80th and 30th percentiles of training-day severity. That gives about 20% Immediate (URLLC), 50% Routine (eMBB), and 30% Delayed (mMTC), matching EdgePlus Table IV.
+3. **Tier.** Two modes (`slice_mode` in `configs/workload.yaml`):
+   - `fixed` (default): inside each episode, the 20% most severe readings become Immediate (URLLC), the 30% least severe become Delayed (mMTC), and the rest Routine (eMBB). This keeps EdgePlus Table IV's fixed shares, so load is the only thing that changes between regimes.
+   - `natural`: thresholds at the 30th and 80th percentiles of training-day severity, so the mix follows the day's pollution. Used as a stress variant: on the Delhi test day of the sample episode (16 Jan 2021) it gives 31% URLLC, 66% eMBB, and 3.5% mMTC.
 4. **Priority.** High, Moderate, or Low from severity, with hysteresis per sensor.
 5. **Footprints.** Per-class lognormal payload, cycles, and memory, scaled up with severity. These are our assumptions (EdgePlus gives none) and are calibrated in M2.
 6. **Deadline.** Uniform in the tier's band (URLLC 5–15 s, eMBB 30–120 s, mMTC 120–600 s).
 7. **Episodes.** N = 50k, 100k, or 150k readings sampled from a window of real time in one split, with the window compressed to 600 s of simulated arrivals. Dataset A's readings arrive in 5-minute batches, so each reading gets a seeded random offset inside its interval. Footprints and deadlines are drawn per episode from the episode seed, so every method sees identical tasks.
 
-### 8.4 Topology
+### 8.4 Measured properties (milestone M1)
+
+From `results/summary/<dataset>_dataset.json` (sample episodes: test split, seed 0).
+
+| Property | A: CityPulse | B: AirDelhi |
+|---|---|---|
+| Sensors | 449 fixed sites | 13 buses |
+| Readings (train / val / test) | 5.17M / 1.29M / 1.42M | 5.83M / 1.26M / 5.38M |
+| Days (train / val / test) | 40 / 10 / 12 | 54 / 7 / 30 |
+| Area used | 10 × 10 km (rescaled) | 21.6 × 25.8 km (true scale) |
+| Points clustered into sites | 449 sites | 4,815 cells of 100 m |
+| Variation of arrivals per second (CV) | 0.05 to 0.10 | 0.31 at every load |
+| Busiest site's task share, relative to the mean | 2.1× | 3.3× |
+
+The CityPulse arrival variation matches a Poisson stream (1/√250 ≈ 0.063 at 250 tasks/s), so its load is steady. AirDelhi's stays at 0.31 at all three loads because the rate itself changes over time (bus routes and rush hours), and one Delhi site receives a third of all tasks. These are the conditions the design targets: bursty arrivals and uneven sites.
+
+Figures: `docs/figures/{citypulse,airdelhi}_{topology,arrivals,severity}.png`.
+
+### 8.5 Topology
 
 - Weighted K-means with C = 10 on sensor locations (seed 39). Dataset A uses its 449 sites; Dataset B uses 100 m grid cells weighted by reading count and severity. Neighbours come from a Delaunay triangulation of the centres.
 - Both datasets use the same inventory (1 stationary and 2 mobile servers per site, 2 cloud servers), so the data is the only thing that changes.
 - A second Delhi map with C = 15 tests a different topology, which EdgePlus cannot handle without a new set of actors.
 
-### 8.5 Optional Dataset C
+### 8.6 Optional Dataset C
 
 Telecom Italia's Milan mobile-traffic data (Harvard Dataverse, 62 daily files of about 0.3 GB each) as a cross-domain stress test, if time allows.
 
@@ -270,7 +291,7 @@ We report the outcome of every test, including the ones that go against us.
 
 | Milestone | Content | Output |
 |---|---|---|
-| M1 | Project skeleton, data pipelines for A and B, topology | labeled readings, maps, dataset summaries |
+| M1 (done) | Project skeleton, data pipelines for A and B, topology | labeled readings, maps, dataset summaries |
 | M2 | Simulator core (queues, latency, slices, masks, ledger signals, KPIs), heuristic baselines, load calibration | heuristic results at 50k/100k/150k |
 | M3 | EdgePlus reproduction: CCPPO, advisory, ledger, PSO, learned baselines, A1–A6 | OBJ1–OBJ5 tables and figures |
 | M4 | CHORUS stage S1: dispatcher, rejection, Lagrange multipliers, calibrated masks | T1 and part of T2 |
