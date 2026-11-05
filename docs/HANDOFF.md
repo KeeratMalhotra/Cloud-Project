@@ -56,6 +56,7 @@ GitHub repository: <https://github.com/KeeratMalhotra/Cloud-Project>
 | `docs/EdgePlus_Explained.md` | Plain-language walkthrough of the base paper |
 | `docs/EdgePlus_Deep_Review.md` | Full spec of EdgePlus, every reported number, issues found, decisions |
 | `paper/EdgePlus-PEC.md` | The paper (Keerat Malhotra, Bhavya Maheshwari, Bhumika Aswal): reproduction, EdgePlus-PEC, results on CityPulse and AirDelhi |
+| `paper/latex/main.tex`, `paper/EdgePlus-PEC.pdf` | The same paper in LaTeX (IEEEtran, one column, 17 pages) and its compiled PDF; `paper/EdgePlus-PEC_overleaf.zip` is the LaTeX project ready to upload to Overleaf |
 | `results/summary/pec_comparison.md` | EdgePlus vs EdgePlus-PEC tables with CIs and paired tests (written by `scripts/compare.py`) |
 | `docs/Simulator.md` | Simulator model, how we read EdgePlus where it is silent, validation, calibration, rule-based results |
 | `docs/HANDOFF.md` | This file |
@@ -265,7 +266,7 @@ Run each command from the repo root. Each `launch.py` call stops itself after `-
 
    Each `launch.py` or `evaluate.py` call is one step: wrap it in `timeout --kill-after=10 600`, use `--minutes 7`, and repeat it until done (Section 7).
 5. **Also not planned:** FD3QN, DDPG, and SAC baselines; the OBJ6 PID script; A2–A6 retrained under the current protocol. Give the retrained runs names ending in `_bc_s<seed>`, so `sync_runs.sh` keeps their checkpoints.
-6. **Merge:** mark draft PR #5 ready and merge it into `main`.
+6. ~~**Merge.**~~ PR #5 merged into `main` on 4 Nov 2026, with the LaTeX version of the paper.
 
 ## 7. Operating rules (read before running anything)
 

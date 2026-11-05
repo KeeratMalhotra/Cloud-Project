@@ -76,7 +76,7 @@ results/summary/    committed result summaries
 
 ## Status
 
-Data pipelines, the shared simulator, the EdgePlus reproduction, and EdgePlus-PEC are implemented, trained, and evaluated on both datasets. The paper is [`paper/EdgePlus-PEC.md`](paper/EdgePlus-PEC.md); results so far and the next steps are in [`docs/HANDOFF.md`](docs/HANDOFF.md).
+Data pipelines, the shared simulator, the EdgePlus reproduction, and EdgePlus-PEC are implemented, trained, and evaluated on both datasets. The paper is [`paper/EdgePlus-PEC.pdf`](paper/EdgePlus-PEC.pdf) (LaTeX source in `paper/latex/`, ready-to-upload Overleaf project in `paper/EdgePlus-PEC_overleaf.zip`, Markdown version in `paper/EdgePlus-PEC.md`); results so far and the next steps are in [`docs/HANDOFF.md`](docs/HANDOFF.md).
 
 ## Data sources and licenses
 
