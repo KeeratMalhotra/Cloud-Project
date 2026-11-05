@@ -29,7 +29,7 @@ Every scheduler in this project (the EdgePlus reproduction, its baselines, rule-
 ## 1. What is simulated
 
 - **Episode.** One task table from `scripts/prepare_data.py`: 50k, 100k, or 150k tasks arriving over 600 s. The simulation continues until every admitted task has finished.
-- **Events.** For each arrival the simulator advances every server to the arrival time, refreshes slice budgets, computes predictions and the mask for all 32 servers, and asks the policy for a decision. Every 5 s it makes a slow decision (mobile moves, and slice shares in milestone M5), either with a built-in rule or by asking an external controller.
+- **Events.** For each arrival the simulator advances every server to the arrival time, refreshes slice budgets, computes predictions and the mask for all 32 servers, and asks the policy for a decision. Every 5 s it makes a slow decision (mobile moves and slice shares), either with a built-in rule or by asking an external controller.
 - **Common random numbers.** Each task gets a service-time factor, an uplink factor, and a driving factor drawn from the episode seed. The draws do not depend on the server or the scheduler, so paired comparisons between schedulers have low variance.
 - **Speed.** About 7,000 to 8,000 decisions per second on one core. A 150k-task episode takes 20 to 45 s.
 
