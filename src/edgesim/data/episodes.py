@@ -1,4 +1,4 @@
-"""Build task episodes from labeled readings (docs/CHORUS_Design.md, section 8.3, step 7).
+"""Build task episodes from labeled readings (EdgePlus Alg. 3; docs/EdgePlus_Deep_Review.md, Section 2.11).
 
 An episode samples N readings from a window of whole consecutive days in one split and compresses the
 window to `horizon_s` seconds of simulated arrivals. Footprints and deadlines are drawn from the episode

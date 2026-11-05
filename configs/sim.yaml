@@ -30,12 +30,18 @@ network:                         # EdgePlus Eq. 30: R = zeta * W / reuse * log2(
   wan_delay_s: 0.05              # one way, edge site to cloud region
   downlink_s: [0.001, 0.001, 0.05]   # result return, by server kind: stationary, mobile, cloud
   road_factor: 1.3               # driving distance = straight line x road_factor
+  metro_gbps: 1.0                # link from a site to its neighbours (used only with mobility.serve_remote)
+  metro_delay_s: 0.002           # one way
 
 energy:
   device_tx_w: 0.2
   j_per_cycle: [2.0e-11, 3.0e-11, 1.0e-11]   # by kind: stationary, mobile, cloud
   backhaul_j_per_bit: 2.0e-8
   drive_j_per_m: 540.0           # about 0.15 kWh/km; reported separately from IT energy
+  dvfs:                          # EdgePlus-PEC: slack-based DVFS on edge cores (off in EdgePlus)
+    enabled: false
+    levels: [0.6, 0.8, 1.0]      # core speed factors; dynamic energy per cycle scales with speed^2
+    margin: 0.5                  # slowed run time x (1 + margin) must fit before the deadline
 
 queue:
   discipline: fifo               # fifo | slice_priority (URLLC > eMBB > mMTC, FIFO within a slice)
@@ -77,6 +83,10 @@ mobility:
   distress_lo_s: 2.0             # neighbour must be below this to give up a mobile
   max_moves_per_step: 2
   battery_reserve: 0.1
+  serve_remote: false            # EdgePlus-PEC: a neighbouring site's mobile serves in place; the data travels over
+                                 # the metro link instead of the vehicle driving to the task's site
+  distress_persist_steps: 1      # EdgePlus-PEC: slow steps a site must stay distressed before a mobile drives in
+  donor_order: calm              # calm (EdgePlus: calmest neighbour first) | near (nearest calm neighbour first)
 
 ledger:
   feedback: true                 # reputation and debt are tracked and used (EdgePlus Sec. III-H)
@@ -85,3 +95,18 @@ ledger:
   rep_threshold: 0.6
   rep_urllc_threshold: 0.7
   debt_tau_s: 30.0
+  consensus:                     # ledger timing, EdgePlus Sec. III-M (values the paper leaves open are marked *)
+    mode: blocks                 # blocks: reputation/debt change when the record's partial block is committed by
+                                 # edge PoA (Sec. III-M.7) | instant: at task completion (idealised)
+    block_min: 16                # * S_min of Eq. 21, tuples
+    block_max: 256               # * S_max of Eq. 21, tuples
+    rho_max: 1.0                 # * rho_max of Eq. 21
+    write_max: 50.0              # * lambda_max of Eq. 21, tuples/s per cluster (about 2x the mean at 150k)
+    timeout_s: null              # EdgePlus cuts a block only when it is full; EdgePlus-PEC adds a time bound
+    validators: 10               # |A_c| (the paper's sub-ms figure is for |A_c| <= 10)
+    quorum: two_thirds           # * votes the leader collects: all | two_thirds
+    global_period_s: 5.0         # * "periodically" (Sec. III-M.3): cloud BFT round period
+    global_trigger: periodic     # periodic (EdgePlus) | eager (EdgePlus-PEC: pipelined rounds start on demand)
+    bft_replicas: 4              # * smallest PBFT group that tolerates one fault
+    cloud_rtt_s: 0.001           # * round trip between cloud replicas
+    crypto_us: {sign: 27.3, verify: 89.8, tag: 0.45, hash_fixed: 1.11, hash_per_tuple: 0.178}  # bench_crypto.py

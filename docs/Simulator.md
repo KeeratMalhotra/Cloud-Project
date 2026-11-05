@@ -1,6 +1,6 @@
 # Shared simulator: specification, validation, calibration, baselines (milestone M2)
 
-Every scheduler in this project (the EdgePlus reproduction, its baselines, rule-based dispatchers, and CHORUS) runs in this simulator. Same code, same task streams, same random draws.
+Every scheduler in this project (the EdgePlus reproduction, its baselines, rule-based dispatchers, and EdgePlus-PEC) runs in this simulator. Same code, same task streams, same random draws.
 
 - Code: `src/edgesim/sim/` (`env.py` is the core), dispatchers in `src/edgesim/agents/heuristics.py`.
 - Settings: `configs/sim.yaml` (simulator), `configs/topology.yaml` (servers), `configs/systems.yaml` (system presets), `configs/workload.yaml` (tasks).
@@ -76,7 +76,7 @@ For a task from site `c`, the candidates follow EdgePlus's routing order:
 When no server passes, the simulator decides by itself:
 
 - `best_effort` (EdgePlus): the lowest predicted latency, preferring servers still predicted to meet the deadline.
-- `reject` (EdgePlus+ and CHORUS): drop the task only if no server is predicted to meet its deadline (a hopeless task); otherwise behave like `best_effort`.
+- `reject` (EdgePlus+): drop the task only if no server is predicted to meet its deadline (a hopeless task); otherwise behave like `best_effort`.
 
 With exactly one option and no reject action, the simulator also decides automatically. Each empty mask is logged with the check that emptied it (`empty_by_*` in the KPIs).
 
@@ -86,7 +86,7 @@ With exactly one option and no reject action, the simulator also decides automat
 - **Mobility.**
   - `distress` (EdgePlus's redeployment, with straight-line routes instead of CBS–D* Lite): every 5 s, a site with more than 10 s of queued work per core pulls the least-loaded mobile from a neighbour that has less than 2 s; at most 2 moves per step.
   - Tier-2 assignments also relocate mobiles.
-  - `external` hands moves to an agent (CHORUS, milestone M5).
+  - `external` hands moves to an external controller.
 - **Ledger signals** (EdgePlus Eqs. 14, 28):
   - reputation per server: EMA with weight 0.05 of +1 (on time) or −1 (late);
   - debt per site: average on-time throughput minus the site's own, floored at 0, with a 30 s EWMA.
@@ -96,9 +96,9 @@ With exactly one option and no reject action, the simulator also decides automat
 
 | Predictor | Queue wait estimate | Where |
 |---|---|---|
-| `backlog` (default) | 0 if there are fewer busy and queued-ahead tasks than cores; otherwise expected remaining work ahead ÷ cores. Under slice priority, also divided by (1 − ρ of higher slices) to account for higher-priority work that arrives while the task waits. | EdgePlus (fair setting), EdgePlus+, CHORUS |
+| `backlog` (default) | 0 if there are fewer busy and queued-ahead tasks than cores; otherwise expected remaining work ahead ÷ cores. Under slice priority, also divided by (1 − ρ of higher slices) to account for higher-priority work that arrives while the task waits. | EdgePlus (fair setting), EdgePlus+, EdgePlus-PEC |
 | `kingman` | EdgePlus Eq. 31 in its M/G/c form (Sakasegawa): ρ^(√(2(c+1))−1) / (c(1−ρ)) · (c_a² + c_s²)/2 · E[S], using live utilization and online service statistics; ignores the current queue | `edgeplus_literal` |
-| calibrated | `backlog` plus an adaptive conformal margin per (slice, server kind) | CHORUS (`mask.calibrated`) |
+| calibrated | `backlog` plus an adaptive conformal margin per (slice, server kind) | optional (`mask.calibrated`), not used in the main comparison |
 
 The calibrated bound is `U = L̂ + q_g · max(L̂, 0.5 s)`:
 
@@ -109,7 +109,7 @@ The calibrated bound is `U = L̂ + q_g · max(L̂, 0.5 s)`:
 Smoke test on one CityPulse test episode with greedy EFT:
 
 - At 100k tasks, the observed share of tasks exceeding their bound was 1.0%, 5.0%, and 10.0%: on target.
-- At 150k it drifted to 1.0%, 10%, and 16% (URLLC, eMBB, mMTC), because load ramps up faster than the step size can follow. Tuning comes with CHORUS in M4.
+- At 150k it drifted to 1.0%, 10%, and 16% (URLLC, eMBB, mMTC), because load ramps up faster than the step size can follow. Tuning it is left open; the calibrated mask is not used in the main comparison.
 
 Why `backlog` and not `kingman` for EdgePlus in the main comparison: on one CityPulse test episode, greedy EFT with the Kingman form drops from 100% to 98.7% success at 100k and from 78% to 69% at 150k. Its 95th-percentile prediction error grows from 5 s to 155 s, because the steady-state formula ignores the actual queue. Using it would weaken EdgePlus for reasons unrelated to learning. We report it as the literal variant.
 
@@ -122,9 +122,9 @@ Why `backlog` and not `kingman` for EdgePlus in the main comparison: on one City
 | `edgeplus` | FIFO | best effort | no | backlog |
 | `edgeplus_literal` | FIFO | best effort | no | Kingman |
 | `edgeplus_plus` | slice priority | reject hopeless | no | backlog |
-| `chorus` | slice priority | reject hopeless | yes | backlog + conformal |
+| `edgeplus_pec` | slice priority | best effort | no | backlog |
 
-Presets change system features only. The scheduling policy is chosen separately, so comparison track T1 (same choices) and track T2 (full framework) from the design document map to these presets.
+Presets change system features only; the scheduling policy is chosen separately. `edgeplus_pec` also changes mobility (serve in place, damped redeployment), adds DVFS, and shortens ledger timing. Its single-change variants (`edgeplus_pq`, `edgeplus_energy`, `edgeplus_cons`) are in `configs/systems.yaml` and described in `paper/EdgePlus-PEC.md`, Section 7.
 
 ## 8. How we read EdgePlus where it is silent
 
@@ -220,10 +220,10 @@ Full tables (all KPIs, all dispatchers): `results/summary/heuristics_{citypulse,
 ### What the baselines show
 
 1. **Simple rules sit inside EdgePlus's reported band.** Greedy EFT and local-first get 77–81% at 150k on CityPulse. EdgePlus's learned methods report 79.4–82.8% in Fig. 4. A learned EdgePlus therefore has to beat greedy EFT to show any value from learning (deep review 5.3.4).
-2. **FIFO is what kills URLLC.** Under the EdgePlus preset, URLLC success is 41–46% at 150k while mMTC is near 100%: urgent tasks wait behind long eMBB queues. Priority queues and hopeless-task rejection (`edgeplus_plus`) raise URLLC to 100% and overall success to about 90%, with no learning. This is why comparison track T1 keeps EdgePlus's system features fixed, and why EdgePlus+ exists.
-3. **Priority has a cost.** Under `edgeplus_plus`, mMTC drops to 86–93% at 150k (it is near 100% under FIFO) and Lp95 rises to 150–300 s: low-priority work starves. This is the trade-off CHORUS's orchestrators and per-slice targets are meant to manage.
+2. **FIFO is what kills URLLC.** Under the EdgePlus preset, URLLC success is 41–46% at 150k while mMTC is near 100%: urgent tasks wait behind long eMBB queues. Priority queues and hopeless-task rejection (`edgeplus_plus`) raise URLLC to 100% and overall success to about 90%, with no learning. This is why EdgePlus+ exists, and why EdgePlus-PEC adds priority queues.
+3. **Priority has a cost.** Under `edgeplus_plus`, mMTC drops to 86–93% at 150k (it is near 100% under FIFO) and Lp95 rises to 150–300 s: low-priority work starves. EdgePlus-PEC shows the same trade-off (`paper/EdgePlus-PEC.md`, Section 9).
 4. **Delhi is much harder at the same capacity.** Success at 150k falls to about 55% (EdgePlus preset) and 72% (EdgePlus+). For greedy EFT under the EdgePlus preset, 71% of tasks find an empty mask, 19% find every candidate's memory full, and 37% of executed tasks go to the cloud. The causes are bursty arrivals (arrival-rate CV 0.31) and one site carrying 35% of the training-day load. Spare capacity elsewhere goes unused because only mobiles can move it, and only to neighbouring sites.
-5. **The dispatcher matters little once the system is overloaded.** On Delhi at 150k, all dispatchers under the same preset are within 1 pp (EdgePlus) to 2 pp (EdgePlus+) of each other. The large gains come from system design (queue order, admission, where capacity sits), which supports CHORUS's focus on orchestration and mobility.
+5. **The dispatcher matters little once the system is overloaded.** On Delhi at 150k, all dispatchers under the same preset are within 1 pp (EdgePlus) to 2 pp (EdgePlus+) of each other. The large gains come from system design (queue order, admission, where capacity sits), which is why EdgePlus-PEC changes the system rather than the scheduler.
 
 ## 12. Using the simulator
 
@@ -270,4 +270,4 @@ python scripts/run_heuristics.py --dataset citypulse --regimes stress --seeds 0 
 - Radio is a link-budget formula with fading noise. There is no interference model or scheduler at the radio layer. Uplinks are milliseconds, so radio slices almost never bind.
 - Batteries (20 kWh) never run low within a 600 s episode.
 - Footprints (cycles, payload, memory per slice) and server sizes are our assumptions, because EdgePlus gives none (deep review Section 4). Capacity is calibrated on CityPulse only, and AirDelhi uses the same total capacity.
-- Calibration margins drift under fast load ramps (Section 6). This is addressed with CHORUS in M4.
+- Calibration margins drift under fast load ramps (Section 6). This is not addressed; the calibrated mask is not used in the main comparison.

@@ -23,3 +23,9 @@ runs/
 # OS / editor
 .DS_Store
 *.swp
+
+# LaTeX build files
+paper/latex/*.aux
+paper/latex/*.log
+paper/latex/*.out
+paper/latex/*.synctex.gz

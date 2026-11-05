@@ -1,4 +1,4 @@
-# How readings become tasks (EdgePlus Algorithm 3 made concrete; see docs/CHORUS_Design.md, section 8.3).
+# How readings become tasks (EdgePlus Algorithm 3 made concrete; see docs/EdgePlus_Deep_Review.md, Section 2.11).
 horizon_s: 600                   # arrivals of one episode span 600 s of simulated time (implied by EdgePlus Fig. 5)
 
 # fixed:   rank tasks by severity inside each episode so the class mix is exactly target_shares
