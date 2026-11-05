@@ -1,6 +1,6 @@
 # Sites and server inventory (same on every dataset so that only the data changes).
 # Servers are multi-core: a task runs on one core. Core speeds are multiplied by capacity.scale in
-# configs/sim.yaml, which is calibrated in milestone M2 (scripts/calibrate_capacity.py).
+# configs/sim.yaml, which is calibrated with scripts/calibrate_capacity.py.
 n_clusters: 10
 kmeans:
   seed: 39                       # EdgePlus seed for clusterer initialization

@@ -1,4 +1,4 @@
-# How readings become tasks (EdgePlus Algorithm 3 made concrete; see docs/EdgePlus_Deep_Review.md, Section 2.11).
+# How readings become tasks (EdgePlus Algorithm 3 made concrete; paper, Section IV-B).
 horizon_s: 600                   # arrivals of one episode span 600 s of simulated time (implied by EdgePlus Fig. 5)
 
 # fixed:   rank tasks by severity inside each episode so the class mix is exactly target_shares
@@ -32,7 +32,7 @@ deadline_s:                      # EdgePlus Sec. IV-B2
   mMTC: [120, 600]
 
 # Per-class footprints as lognormal (median, sigma). EdgePlus gives no values; these are our
-# starting assumptions and are calibrated in milestone M2.
+# assumptions; server capacity is calibrated against them (scripts/calibrate_capacity.py).
 footprint:
   URLLC: {payload_kb: [50, 0.5], cycles_g: [0.5, 0.4], mem_mb: [64, 0.2]}
   eMBB: {payload_kb: [2000, 0.5], cycles_g: [2.0, 0.4], mem_mb: [256, 0.2]}

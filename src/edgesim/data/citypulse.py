@@ -1,8 +1,7 @@
 """Dataset A: CityPulse pollution measurements (the data EdgePlus used).
 
 The 449-site, Aug-Oct 2014 pollution stream on the CityPulse site is located in Aarhus, Denmark, and is
-generated (a bounded random walk of index values, one step every 5 minutes). See
-docs/EdgePlus_Deep_Review.md, section 5.1.
+generated (a bounded random walk of index values, one step every 5 minutes).
 
 Each file `pollutionData<id>.csv` has columns:
     ozone, particullate_matter, carbon_monoxide, sulfure_dioxide, nitrogen_dioxide, longitude, latitude, timestamp

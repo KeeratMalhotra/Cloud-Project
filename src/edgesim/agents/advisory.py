@@ -4,7 +4,7 @@
 
 The biases only reorder feasible servers; masking happens afterwards.
 
-Two deliberate readings (docs/EdgePlus_Deep_Review.md, Section 5.4):
+Two deliberate readings of EdgePlus (paper, Section VI-C):
   * Nash: each site's payoff depends only on its own sharing level, so the best response has the closed form
     s_c = clip(1 - alpha_N * load_c / (2 * gamma_N), s_min, s_max). One evaluation equals the iterated
     best-response fixed point.

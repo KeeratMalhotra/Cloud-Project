@@ -7,7 +7,7 @@
 #   * warm start: the first 300k decisions follow greedy EFT and the actor imitates it; afterwards PPO trains
 #     with an imitation term of constant weight 0.3 (bc_decay_frac large = no decay). With the term fading to 0
 #     (the earlier protocol) PPO fine-tuning fell to 64-73% at 150k against 80% for greedy EFT; with weight 0.3
-#     the policy stayed at 79% (pilot runs p3a-p3d, docs/HANDOFF.md).
+#     the policy stayed at 79% (pilot runs p3a-p3d; paper, Table V).
 #   * PPO: lr 3e-4, gamma 0.9, 1024 steps x 8 envs per update, entropy 0.003, latency weight 0.5.
 
 defaults:

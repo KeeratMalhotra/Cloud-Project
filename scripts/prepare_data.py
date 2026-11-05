@@ -1,4 +1,4 @@
-"""Prepare one dataset: labels, topology, and sample episodes (milestone M1).
+"""Prepare one dataset: labels, topology, and sample episodes.
 
 Usage:
     python scripts/download_data.py --dataset citypulse     # fetch the Parquet mirror
