@@ -11,7 +11,7 @@
 \usepackage{array}
 \usepackage{url}
 \usepackage[hidelinks]{hyperref}
-\graphicspath{{figures/}}
+\graphicspath{{figures/}{../../docs/figures/}}  % figures/ in the Overleaf zip; docs/figures in the repository
 \newcommand{\file}[1]{\path{#1}}
 \renewcommand{\arraystretch}{1.15}
 
@@ -671,7 +671,7 @@ Faster commits require more blocks and more BFT rounds. A CityPulse test episode
 We reproduced EdgePlus in an open simulator, within 4~pp of its reported success at the heaviest load, and extended it with three system changes: slice-priority queues, energy-aware execution and mobility, and fast ledger consensus. With the scheduler unchanged and trained identically, EdgePlus-PEC raised on-time success at 150,000 tasks by about 20~pp, both on the CityPulse data EdgePlus used and on real data from New Delhi. URLLC tasks met 98.6--100\% of their deadlines, energy fell by 71--99\%, mostly through less driving, and ledger records were committed within half a second instead of 19--24 seconds. A greedy rule gains as much from these changes as the trained scheduler, so the gains belong to the system design. They come with lower mMTC success, a longer tail on the Delhi data, and more ledger work.
 
 \section*{Code and Data Availability}
-Code is available at \url{https://github.com/KeeratMalhotra/Cloud-Project}. Trained checkpoints, training logs, and evaluations are on the branch \file{runs-mirror}, and dataset copies with checksums are on \file{data-mirror}. After the setup described in \file{docs/HANDOFF.md}, the results can be regenerated from the repository root:
+Code is available at \url{https://github.com/KeeratMalhotra/Cloud-Project}. Trained checkpoints, training logs, and evaluations are on the branch \file{runs-mirror}, and dataset copies with checksums are on \file{data-mirror}. After the setup described in the repository's \file{README.md}, the results can be regenerated from the repository root:
 {\footnotesize
 \begin{verbatim}
 bash scripts/sync_runs.sh pull                 # restore trained runs and evaluations

@@ -64,7 +64,7 @@ case "${1:-}" in
 # Training runs (branch `runs-mirror`)
 
 Checkpoints, training logs, PSO records, and evaluation CSVs from `runs/` on the code branches. This branch
-has its own history; restore with `bash scripts/sync_runs.sh pull` from a code branch. See `docs/HANDOFF.md`.
+has its own history; restore with `bash scripts/sync_runs.sh pull` from `main`. See the README on `main`.
 EOF
     (cd "$WT" && git add -A && { git diff --cached --quiet && echo "nothing new to save"; } || \
        (git commit -q -m "$msg" && git push -q -u origin "$BRANCH" && echo "pushed to $BRANCH: $(git log --oneline -n 1)"))

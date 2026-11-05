@@ -14,7 +14,7 @@ edgeplus_literal:                # EdgePlus with its Kingman queue surrogate in 
   mobility: {mode: distress}
 
 edgeplus_plus:                   # EdgePlus plus slice-priority queues and hopeless-task rejection (review I-4, I-9);
-  queue: {discipline: slice_priority, predictor: backlog}   # used for the rule-based results of milestone M2
+  queue: {discipline: slice_priority, predictor: backlog}   # used for the rule-based results in docs/Simulator.md
   mask: {infeasible: reject, calibrated: false}
   dispatch: {allow_reject: false}
   mobility: {mode: distress}

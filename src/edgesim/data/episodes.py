@@ -1,4 +1,4 @@
-"""Build task episodes from labeled readings (EdgePlus Alg. 3; docs/EdgePlus_Deep_Review.md, Section 2.11).
+"""Build task episodes from labeled readings (EdgePlus Alg. 3; paper, Section IV).
 
 An episode samples N readings from a window of whole consecutive days in one split and compresses the
 window to `horizon_s` seconds of simulated arrivals. Footprints and deadlines are drawn from the episode
