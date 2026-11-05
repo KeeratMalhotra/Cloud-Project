@@ -45,7 +45,7 @@ GitHub repository: <https://github.com/KeeratMalhotra/Cloud-Project>
 | Branch | Content | State |
 |---|---|---|
 | `main` | Docs, data pipeline (M1), simulator (M2) | PRs #1–#4 merged |
-| `feat/m3-edgeplus` | EdgePlus reproduction, EdgePlus-PEC, training and evaluation scripts, paper draft, this file | pushed, draft PR #5 |
+| `feat/m3-edgeplus` | EdgePlus reproduction, EdgePlus-PEC, training and evaluation scripts, the paper, this file | pushed, draft PR #5 |
 | `data-mirror` | Parquet copies of both datasets with SHA-256 checksums (210 MB, separate history) | complete |
 | `runs-mirror` | Training runs: checkpoints, logs, PSO records, evaluations (separate history) | updated after each batch |
 
@@ -55,7 +55,7 @@ GitHub repository: <https://github.com/KeeratMalhotra/Cloud-Project>
 |---|---|
 | `docs/EdgePlus_Explained.md` | Plain-language walkthrough of the base paper |
 | `docs/EdgePlus_Deep_Review.md` | Full spec of EdgePlus, every reported number, issues found, decisions |
-| `paper/EdgePlus-PEC_draft.md` | Paper draft: reproduction, EdgePlus-PEC, results on CityPulse and AirDelhi |
+| `paper/EdgePlus-PEC.md` | The paper (Keerat Malhotra, Bhavya Maheshwari, Bhumika Aswal): reproduction, EdgePlus-PEC, results on CityPulse and AirDelhi |
 | `results/summary/pec_comparison.md` | EdgePlus vs EdgePlus-PEC tables with CIs and paired tests (written by `scripts/compare.py`) |
 | `docs/Simulator.md` | Simulator model, how we read EdgePlus where it is silent, validation, calibration, rule-based results |
 | `docs/HANDOFF.md` | This file |
@@ -107,7 +107,7 @@ Run `status.py` only after `sync_runs.sh pull` has finished; started at the same
 | M3 | EdgePlus reproduction: CCPPO, advisory, PSO, ledger signals (now timed), ablations | full EdgePlus (A1) done with 3 seeds under the current protocol; A2–A6 only under the earlier protocol; FD3QN, DDPG, SAC not implemented |
 | M4 | EdgePlus-PEC: priority queues, energy-aware execution and mobility, fast consensus | done: 3 seeds, plus 1 seed per single change |
 | M5 | Test days on CityPulse and AirDelhi (no retraining), statistics, figures | done at 150k (Section 5, first subsection) |
-| M6 | Paper | first draft: `paper/EdgePlus-PEC_draft.md` |
+| M6 | Paper | written: `paper/EdgePlus-PEC.md` |
 
 ### Key facts from M1–M2
 
@@ -255,16 +255,16 @@ Every learned method is 7.6–15.7 pp below greedy EFT. These runs stay on `runs
 Run each command from the repo root. Each `launch.py` call stops itself after `--minutes`; repeat it until `status.py` shows 100%.
 
 1. ~~**Seed-0 batch, `A1_relgate`, imitation-weight pilot.**~~ Done 4 Nov 2026 (Section 5).
-2. ~~**EdgePlus vs EdgePlus-PEC.**~~ Done 4 Nov 2026: trained, tested on both datasets, statistics, figures, and paper draft (Section 5, first subsection).
-3. **Team review of `paper/EdgePlus-PEC_draft.md`**: title, authors, venue, and framing.
-4. **Strengthen the evidence**, most valuable first:
+2. ~~**EdgePlus vs EdgePlus-PEC.**~~ Done 4 Nov 2026: trained, tested on both datasets, statistics, and figures (Section 5, first subsection).
+3. ~~**Write the paper.**~~ Done 4 Nov 2026: `paper/EdgePlus-PEC.md`. The team decided to run no further experiments; the paper reports only work that was done.
+4. **Not planned (team decision, 4 Nov 2026).** If the work is ever extended, the most valuable additions are, in order:
    - Vary the metro link that serve-in-place relies on. Add presets in `configs/systems.yaml` with, for example, `network: {metro_gbps: 0.1}`, and run greedy EFT on them with `run_heuristics.py --systems ... --tag _metro`.
    - Train seeds 1 and 2 for `edgeplus_pq`, `edgeplus_energy`, and `edgeplus_cons`.
    - Evaluate the learned policies at 50k and 100k (`evaluate.py --regimes light medium`).
    - Test DVFS alone, and deadline-aware ordering within slices to reduce the mMTC and tail-latency costs.
 
    Each `launch.py` or `evaluate.py` call is one step: wrap it in `timeout --kill-after=10 600`, use `--minutes 7`, and repeat it until done (Section 7).
-5. **Optional:** FD3QN, DDPG, and SAC baselines; the OBJ6 PID script; A2–A6 retrained under the current protocol. Give the retrained runs names ending in `_bc_s<seed>`, so `sync_runs.sh` keeps their checkpoints.
+5. **Also not planned:** FD3QN, DDPG, and SAC baselines; the OBJ6 PID script; A2–A6 retrained under the current protocol. Give the retrained runs names ending in `_bc_s<seed>`, so `sync_runs.sh` keeps their checkpoints.
 6. **Merge:** mark draft PR #5 ready and merge it into `main`.
 
 ## 7. Operating rules (read before running anything)
